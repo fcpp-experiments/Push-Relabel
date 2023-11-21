@@ -187,21 +187,20 @@ private:
 
 	void relabel(node& u) {
 		int max_height = INT_MAX;
-		omp_set_lock(&u.writelock);
+
 		for (edge *e : u.neighbors) {
 			node* test = e->u;
 			if (e->u == &u) {
 				if (e->flow == e->capacity) {
 					continue;
 				}
-				
+
 				if (e->v->height < max_height) {
 					max_height = e->v->height;
 					u.height = max_height + 1;
 				}
 			}
 		}
-		omp_unset_lock(&u.writelock);
 	}
 
 	void push2(edge& e) {
@@ -221,6 +220,7 @@ private:
 	}
 
 	void discharge(node& u) {
+		omp_set_lock(&u.writelock);
 		int curr_edge = 0;
 		while (u.e_flow > 0) {
 			if (curr_edge >= u.neighbors.size()) {
@@ -228,13 +228,14 @@ private:
 				curr_edge = 0;
 			}
 			else {
-				omp_set_lock(&u.writelock);
+				
 				if (u.height == u.neighbors.at(curr_edge)->v->height + 1) {
 					push2(*u.neighbors.at(curr_edge));
 				}
-				omp_unset_lock(&u.writelock);
+				
 				curr_edge++;
 			}
 		}
+		omp_unset_lock(&u.writelock);
 	}
 };
