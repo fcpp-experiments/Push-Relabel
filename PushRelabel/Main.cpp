@@ -3,6 +3,7 @@
 #include <string>
 #include <sstream>
 #include <unordered_map>
+#include <algorithm>
 #include "graph.hpp"
 
 #include <chrono>
@@ -13,7 +14,6 @@ graph get_graph();
 std::unordered_map<int, node*> node_map;
 
 int main() {
-
 	//create_graph_file();
 
 	graph g = get_graph();
