@@ -36,7 +36,6 @@ struct edge {
 	node *v;
 	int capacity;
 	int flow;
-	omp_lock_t writelock;
 
 	edge(node *u, node *v, int capacity, int flow = 0) {
 		this->capacity = capacity;
@@ -150,15 +149,12 @@ private:
 	}
 
 	void reverse_edge_flow(edge& e_param, int flow) {
-		omp_set_lock(&e_param.v->writelock);
 		for (edge *e : e_param.v->neighbors) {
 			if (e_param.u == e->v) {
 				e->flow -= flow;
-				omp_unset_lock(&e_param.v->writelock);
 				return;
 			}
 		}
-		omp_unset_lock(&e_param.v->writelock);
 
 		// reverse edge does not exist: add it
 		omp_set_lock(&g_writelock);
@@ -189,16 +185,12 @@ private:
 		int max_height = INT_MAX;
 
 		for (edge *e : u.neighbors) {
-			node* test = e->u;
-			if (e->u == &u) {
-				if (e->flow == e->capacity) {
-					continue;
-				}
-
-				if (e->v->height < max_height) {
-					max_height = e->v->height;
-					u.height = max_height + 1;
-				}
+			if (e->flow == e->capacity) {
+				continue;
+			}
+			if (e->v->height < max_height) {
+				max_height = e->v->height;
+				u.height = max_height + 1;
 			}
 		}
 	}
@@ -228,7 +220,6 @@ private:
 				curr_edge = 0;
 			}
 			else {
-				
 				if (u.height == u.neighbors.at(curr_edge)->v->height + 1) {
 					push2(*u.neighbors.at(curr_edge));
 				}
