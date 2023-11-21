@@ -18,9 +18,6 @@
     <ClCompile Include="Main.cpp">
       <Filter>File di risorse</Filter>
     </ClCompile>
-    <ClCompile Include="test.cpp">
-      <Filter>File di risorse</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="graph.hpp">
@@ -28,7 +25,13 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <Text Include="graph_generator.txt">
+    <Text Include="graph2.txt">
+      <Filter>File di risorse</Filter>
+    </Text>
+    <Text Include="graph1.txt">
+      <Filter>File di risorse</Filter>
+    </Text>
+    <Text Include="graph3.txt">
       <Filter>File di risorse</Filter>
     </Text>
   </ItemGroup>
