@@ -17,11 +17,10 @@ int main() {
 	//create_graph_file();
 
 	graph g = get_graph();
-		
+
 	auto start = chrono::high_resolution_clock::now();
 
-	//int flux = g.get_max_flow(*node_map[1], *node_map[4]);
-	int flux = g.get_max_flow_parallel(*node_map[1], *node_map[4]);
+	int flux = g.get_max_flow(*node_map[1], *node_map[4]);
 
 	auto stop = chrono::high_resolution_clock::now();
 	auto duration = chrono::duration_cast<chrono::microseconds> (stop - start);
@@ -57,7 +56,7 @@ graph get_graph() {
 				node_map.insert({ v_id, v });
 			}
 
-			g.add_edge(*node_map[u_id], *node_map[v_id], stoi(s_capacity));
+			g.add_edge(*node_map[u_id], *node_map[v_id], stoll(s_capacity));
 
 		}
 	}
@@ -77,7 +76,7 @@ void create_graph_file() {
 
 	for (int i = 1; i <= n_nodes; i++) {
 
-		int n = 1 + rand() % 10; // number of children
+		int n = 10 + rand() % 20; // number of children
 
 		for (int k = 0; k < n; k++) {
 			string new_line = "";

@@ -34,5 +34,8 @@
     <Text Include="graph3.txt">
       <Filter>File di risorse</Filter>
     </Text>
+    <Text Include="graph4.txt">
+      <Filter>File di risorse</Filter>
+    </Text>
   </ItemGroup>
 </Project>
