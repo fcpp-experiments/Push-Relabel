@@ -1,3 +1,6 @@
+#ifndef GRAPH_H
+#define GRAPH_H
+
 #include <vector>
 #include <omp.h>
 #include <iostream>
@@ -9,7 +12,7 @@ struct edge;
 struct node {
 	int id;
 	int height;
-	long long int e_flow; // excess flow
+	long long e_flow; // excess flow
 	vector<edge*> neighbors;
 
 	node(int id) {
@@ -29,7 +32,7 @@ struct edge {
 	node* u;
 	node* v;
 	long long int capacity;
-	long long int flow;
+	long long flow;
 
 	edge(node* u, node* v, long long int capacity, long long int flow = 0) {
 		this->capacity = capacity;
@@ -74,7 +77,6 @@ public:
 	}
 
 	long long int get_max_flow(node& source, node& t) {
-		bool test = true;
 		int remaining = 1;
 
 		preflow(source);
@@ -110,6 +112,7 @@ private:
 	void reverse_edge_flow(edge& e_param, long long int flow) {
 		for (edge* e : e_param.v->neighbors) {
 			if (e_param.u == e->v) {
+				#pragma omp atomic
 				e->flow -= flow;
 				return;
 			}
@@ -124,7 +127,8 @@ private:
 
 		#pragma omp atomic
 		e.v->e_flow += flow;
-
+		
+		#pragma omp atomic
 		e.flow += flow;
 
 		reverse_edge_flow(e, flow);
@@ -153,3 +157,5 @@ private:
 		}
 	}
 };
+
+#endif
