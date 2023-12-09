@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include "graph.hpp"
+#include "tests.hpp"
 
 #include <chrono>
 
@@ -16,11 +17,13 @@ std::unordered_map<int, node*> node_map;
 int main() {
 	//create_graph_file();
 
+	tests::start_tests();
+
 	graph g = get_graph();
 
 	auto start = chrono::high_resolution_clock::now();
 
-	int flux = g.get_max_flow(*node_map[1], *node_map[4]);
+	long long flux = g.get_max_flow(*node_map[1], *node_map[126]);
 
 	auto stop = chrono::high_resolution_clock::now();
 	auto duration = chrono::duration_cast<chrono::microseconds> (stop - start);

@@ -18,6 +18,9 @@
     <ClCompile Include="Main.cpp">
       <Filter>File di risorse</Filter>
     </ClCompile>
+    <ClCompile Include="tests.hpp">
+      <Filter>File di risorse</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="graph.hpp">
@@ -37,5 +40,25 @@
     <Text Include="graph4.txt">
       <Filter>File di risorse</Filter>
     </Text>
+    <Text Include="test_files\test1.txt" />
+    <Text Include="test_files\test2.txt" />
+    <Text Include="test_files\test3.txt" />
+    <Text Include="test_files\test4.txt" />
+    <Text Include="test_files\test5.txt" />
+    <Text Include="test_files\test6.txt" />
+    <Text Include="test_files\test7.txt" />
+    <Text Include="test_files\test8.txt" />
+    <Text Include="test_files\test9.txt" />
+    <Text Include="test_files\test10.txt" />
+    <Text Include="test_files\test11.txt" />
+    <Text Include="test_files\test12.txt" />
+    <Text Include="test_files\test13.txt" />
+    <Text Include="test_files\test14.txt" />
+    <Text Include="test_files\test15.txt" />
+    <Text Include="test_files\test16.txt" />
+    <Text Include="test_files\test17.txt" />
+    <Text Include="test_files\test18.txt" />
+    <Text Include="test_files\test19.txt" />
+    <Text Include="test_files\test20.txt" />
   </ItemGroup>
 </Project>
