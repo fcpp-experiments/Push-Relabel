@@ -55,6 +55,8 @@ namespace tests {
 		std::cout << "TEST 19 OK\n";
 		test("test_files\\test20.txt", 126, 2147483648);
 		std::cout << "TEST 20 OK\n";
+		test("test_files\\test21.txt", 5, 3);
+		std::cout << "TEST 21 OK\n";
 	}
 
 	void test(string file_name, int last_node, long long result) {
