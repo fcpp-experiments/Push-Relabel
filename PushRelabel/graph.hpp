@@ -32,7 +32,7 @@ struct edge {
 	node* u;
 	node* v;
 	long long int capacity;
-	long long flow;
+	long long flow = 0, d_flow_u = 0, d_flow_v = 0;
 
 	edge(node* u, node* v, long long int capacity, long long int flow = 0) {
 		this->capacity = capacity;
@@ -93,6 +93,7 @@ public:
 					discharge(*nodes.at(i));
 				}
 			}
+			normalize_edges_flow();
 		}
 
 		return t.e_flow;
@@ -108,12 +109,22 @@ private:
 			edges.push_back(new edge(e->v, e->u, 0, -e->flow));
 		}
 	}
+	
+	void normalize_edges_flow() {
+		for (edge* e : edges) {
+			e->flow += (e->d_flow_u + e->d_flow_v);
+			e->u->e_flow -= e->d_flow_u;
+			e->v->e_flow += e->d_flow_u;
+
+			e->d_flow_u = 0;
+			e->d_flow_v = 0;
+		}
+	}
 
 	void reverse_edge_flow(edge& e_param, long long int flow) {
 		for (edge* e : e_param.v->neighbors) {
 			if (e_param.u == e->v) {
-				#pragma omp atomic
-				e->flow -= flow;
+				e->d_flow_v -= flow;
 				return;
 			}
 		}
@@ -122,14 +133,7 @@ private:
 	void push(edge& e) {
 		long long int flow = min(e.capacity - e.flow, e.u->e_flow);
 
-		#pragma omp atomic
-		e.u->e_flow -= flow;
-
-		#pragma omp atomic
-		e.v->e_flow += flow;
-		
-		#pragma omp atomic
-		e.flow += flow;
+		e.d_flow_u += flow;
 
 		reverse_edge_flow(e, flow);
 	}
@@ -138,23 +142,21 @@ private:
 		int curr_edge = 0, min_height = INT_MAX;
 		edge* min_edge = u.neighbors.at(0);
 
-		while (u.e_flow > 0) {
-			for (edge* e : u.neighbors) {
-				if (e->capacity - e->flow > 0 && e->v->height < min_height) {
-					min_height = e->v->height;
-					min_edge = e;
-				}
+		for (edge* e : u.neighbors) { // min_hood
+			if (e->capacity - e->flow > 0 && e->v->height < min_height) { // mux
+				min_height = e->v->height;
+				min_edge = e;
 			}
-
-			if (u.height > min_height) {
-				push(*min_edge);
-			}
-			else {
-				u.height = min_height + 1; // relabel
-			}
-
-			min_height = INT_MAX;
 		}
+
+		if (u.height > min_height) {
+			push(*min_edge);
+		}
+		else {
+			u.height = min_height + 1; // relabel
+		}
+
+		min_height = INT_MAX;
 	}
 };
 

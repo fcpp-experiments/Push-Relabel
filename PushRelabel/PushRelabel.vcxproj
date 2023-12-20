@@ -152,6 +152,7 @@
     <Text Include="test_files\test19.txt" />
     <Text Include="test_files\test2.txt" />
     <Text Include="test_files\test20.txt" />
+    <Text Include="test_files\test21.txt" />
     <Text Include="test_files\test3.txt" />
     <Text Include="test_files\test4.txt" />
     <Text Include="test_files\test5.txt" />

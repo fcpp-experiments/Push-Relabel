@@ -17,8 +17,6 @@ std::unordered_map<int, node*> node_map;
 int main() {
 	//create_graph_file();
 
-	tests::start_tests();
-
 	graph g = get_graph();
 
 	auto start = chrono::high_resolution_clock::now();
@@ -30,6 +28,10 @@ int main() {
 
 	cout << "max flux: " << flux << " - time: " << duration.count() << "\n";
 
+	tests::start_tests();
+
+	
+
 	return 0;
 }
 
@@ -37,7 +39,7 @@ graph get_graph() {
 	graph g = graph();
 	string line;
 	std::ifstream file;
-	file.open("graph1.txt");
+	file.open("graph4.txt");
 
 	if (file.is_open()) {
 		while (getline(file, line)) {

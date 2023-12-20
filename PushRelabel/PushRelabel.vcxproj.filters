@@ -60,5 +60,6 @@
     <Text Include="test_files\test18.txt" />
     <Text Include="test_files\test19.txt" />
     <Text Include="test_files\test20.txt" />
+    <Text Include="test_files\test21.txt" />
   </ItemGroup>
 </Project>
