@@ -135,7 +135,7 @@ FUN void reverse_u_flow(ARGS, std::unordered_map<int, edge> &edges){
             if(reverse_id != uid && edges[reverse_id].u_age_o < edge_map[uid].u_age){
                 int i = edges[reverse_id].u_age_o - edge_map[uid].last_pushes.age_first_el;
                 std::vector<int> q = edge_map[uid].last_pushes.queue;
-                for(i; i < q.size(); i++){
+                for(; i < q.size(); i++){
                     edges[reverse_id].d_flow_v -= q.at(i);
                 }
             }
@@ -172,11 +172,18 @@ FUN void normalize_edges(ARGS, std::unordered_map<int, edge> &edges){
     }
 }
 
+FUN void disperser(ARGS) { CODE
+    if (node.current_time() > 10)
+        node.velocity() = neighbour_elastic_force(CALL, 300, 0.03) + point_elastic_force(CALL, make_vec(250,250), 0, 0.005);
+}
+FUN_EXPORT disperser_t = export_list<neighbour_elastic_force_t, point_elastic_force_t>;
 
 MAIN() {
     // import tag names in the local scope.
     using namespace tags;
 	using namespace std;
+
+    disperser(CALL);
 
     int source_id = 0, sink_id = 4;
 
@@ -268,7 +275,7 @@ MAIN() {
 }
 
 //! @brief Export types used by the main function (update it when expanding the program).
-FUN_EXPORT main_t = export_list<double, int, bool, edge, std::unordered_map<int, edge>, old_values, tuple<int, int>>;
+FUN_EXPORT main_t = export_list<disperser_t, double, int, bool, edge, std::unordered_map<int, edge>, old_values, tuple<int, int>>;
 
 } // namespace coordination
 
@@ -325,8 +332,12 @@ DECLARE_OPTIONS(list,
     spawn_schedule<spawn_s>, // the sequence generator of node creation events on the network
     store_t,       // the contents of the node storage
     aggregator_t,  // the tags and corresponding aggregators to be logged
+    area<0, 0, 500, 500>,
     init<
         x,      rectangle_d // initialise position randomly in a rectangle for new nodes
+    >,
+    node_attributes<
+        uid,                device_t
     >,
     dimension<dim>, // dimensionality of the space
     connector<connect::fixed<250, 1, dim>>, // connection allowed within a fixed comm range
@@ -341,16 +352,22 @@ DECLARE_OPTIONS(list,
 
 
 //! @brief The main function.
-int main() {
+int main(int argc, char *argv[]) {
     using namespace fcpp;
 
-    //! @brief The network object type (interactive simulator with given options).
-    using net_t = component::interactive_simulator<option::list>::net;
-    //! @brief The initialisation values (simulation name).
-    auto init_v = common::make_tagged_tuple<option::name>("Exercises");
-    //! @brief Construct the network object.
+    // The name of files containing the network information.
+     const std::string file = "input/" + std::string(argc > 1 ? argv[1] : "test");
+    // The network object type (interactive simulator with given options).
+    using net_t = component::interactive_graph_simulator<option::list>::net;
+    // The initialisation values (simulation name).
+    auto init_v = common::make_tagged_tuple<option::name, option::nodesinput, option::arcsinput>(
+        "Aggregate Push-Relabel",
+        file + ".nodes",
+        file + ".arcs"
+    );
+    // Construct the network object.
     net_t network{init_v};
-    //! @brief Run the simulation until exit.
+    // Run the simulation until exit.
     network.run();
     return 0;
 }
