@@ -40,6 +40,9 @@ namespace tags {
     struct node_e_flow {};
     struct node_height {};
     struct edges_num {};
+
+    //! @brief Capacity of edges
+    struct edge_capacities {};
 }
 
 //! @brief The maximum communication range between nodes.
@@ -172,18 +175,11 @@ FUN void normalize_edges(ARGS, std::unordered_map<int, edge> &edges){
     }
 }
 
-FUN void disperser(ARGS) { CODE
-    if (node.current_time() > 10)
-        node.velocity() = neighbour_elastic_force(CALL, 300, 0.03) + point_elastic_force(CALL, make_vec(250,250), 0, 0.005);
-}
-FUN_EXPORT disperser_t = export_list<neighbour_elastic_force_t, point_elastic_force_t>;
 
 MAIN() {
     // import tag names in the local scope.
     using namespace tags;
 	using namespace std;
-
-    disperser(CALL);
 
     int source_id = 0, sink_id = 4;
 
@@ -275,7 +271,7 @@ MAIN() {
 }
 
 //! @brief Export types used by the main function (update it when expanding the program).
-FUN_EXPORT main_t = export_list<disperser_t, double, int, bool, edge, std::unordered_map<int, edge>, old_values, tuple<int, int>>;
+FUN_EXPORT main_t = export_list<double, int, bool, edge, std::unordered_map<int, edge>, old_values, tuple<int, int>>;
 
 } // namespace coordination
 
@@ -313,7 +309,8 @@ using store_t = tuple_store<
     node_is_source,             bool,
     node_e_flow,                int,
     node_height,                int,
-    edges_num,                  int
+    edges_num,                  int,
+    edge_capacities,            field<double>
 >;
 //! @brief The tags and corresponding aggregators to be logged (change as needed).
 using aggregator_t = aggregators<
@@ -334,10 +331,12 @@ DECLARE_OPTIONS(list,
     aggregator_t,  // the tags and corresponding aggregators to be logged
     area<0, 0, 500, 500>,
     init<
-        x,      rectangle_d // initialise position randomly in a rectangle for new nodes
+        node_size,  distribution::constant_n<size_t, 10>
     >,
     node_attributes<
-        uid,                device_t
+        uid,                device_t,
+        x,                  vec<2>,
+        edge_capacities,    field<double>
     >,
     dimension<dim>, // dimensionality of the space
     connector<connect::fixed<250, 1, dim>>, // connection allowed within a fixed comm range
