@@ -175,12 +175,19 @@ FUN void normalize_edges(ARGS, std::unordered_map<int, edge> &edges){
     }
 }
 
+FUN void disperser(ARGS) { CODE
+    vec<2> v = neighbour_elastic_force(CALL, 300, 0.03) + point_elastic_force(CALL, make_vec(250,250), 0, 0.005);
+    if (isnan(v[0]) or isnan(v[1])) v = make_vec(0,0);
+    node.velocity() = v;
+}
+FUN_EXPORT disperser_t = export_list<neighbour_elastic_force_t, point_elastic_force_t>;
 
 MAIN() {
     // import tag names in the local scope.
     using namespace tags;
 	using namespace std;
 
+    disperser(CALL);
     int source_id = 0, sink_id = 4;
 
     bool is_source = false, is_sink = false;
@@ -271,7 +278,7 @@ MAIN() {
 }
 
 //! @brief Export types used by the main function (update it when expanding the program).
-FUN_EXPORT main_t = export_list<double, int, bool, edge, std::unordered_map<int, edge>, old_values, tuple<int, int>>;
+FUN_EXPORT main_t = export_list<disperser_t, double, int, bool, edge, std::unordered_map<int, edge>, old_values, tuple<int, int>>;
 
 } // namespace coordination
 
@@ -291,10 +298,10 @@ constexpr int node_num = 10;
 constexpr size_t dim = 2;
 
 //! @brief Description of the round schedule.
-using round_s = sequence::periodic<
-    distribution::interval_n<times_t, 0, 1>,    // uniform time in the [0,1] interval for start
-    distribution::weibull_n<times_t, 10, 1, 10> // weibull-distributed time for interval (10/10=1 mean, 1/10=0.1 deviation)
->;
+using round_s = sequence::periodic_n<1, 0, 1>;
+//    distribution::interval_n<times_t, 0, 1>,    // uniform time in the [0,1] interval for start
+//    distribution::weibull_n<times_t, 10, 1, 10> // weibull-distributed time for interval (10/10=1 mean, 1/10=0.1 deviation)
+//>;
 //! @brief The sequence of network snapshots (one every simulated second).
 using log_s = sequence::periodic_n<1, 0, 1>;
 //! @brief The sequence of node generation events (node_num devices all generated at time 0).
@@ -320,7 +327,7 @@ using aggregator_t = aggregators<
 //! @brief The general simulation options.
 DECLARE_OPTIONS(list,
     parallel<true>,      // multithreading enabled on node rounds
-    synchronised<false>, // optimise for asynchronous networks
+    synchronised<true>,  // optimise for asynchronous networks
     program<coordination::main>,   // program to be run (refers to MAIN above)
     exports<coordination::main_t>, // export type list (types used in messages)
     retain<metric::retain<2,1>>,   // messages are kept for 2 seconds before expiring
