@@ -40,6 +40,7 @@ namespace tags {
     struct node_e_flow {};
     struct node_height {};
     struct edges_num {};
+    struct max_flow {};
 
     //! @brief Capacity of edges
     struct edge_capacities {};
@@ -188,12 +189,24 @@ MAIN() {
 	using namespace std;
 
     disperser(CALL);
-    int source_id = 0, sink_id = 4;
+    int source_id = 1, sink_id = 4;
 
     bool is_source = false, is_sink = false;
     int uid = node.uid;
     int e_flow = 0;
-    // int e_flow;
+
+//    T data = nbr(CALL, init, [&](field<int> in_flow){
+//        field<int> out_flow = calcolo
+//        return make_tuple(data_to_return, out_flow);
+//    });
+//    tuple<> t = min_hood(CALL, make_tuple(field1, field2));
+//    field<> f = field1 + field2;
+//    field<double> f = map_hood([&](int x, double y, int z){
+//        return 4.5;
+//    }, f1, f2, f3);
+//    int k = fold_hood([&](device_t id?, int x, int acc){
+//        return x + acc;
+//    }, f, base?)
 
     old_values old_v;
     old_v = old(CALL, old_v, [&](old_values edges_height){
@@ -261,9 +274,9 @@ MAIN() {
         return edges_height;
     });
 
-    if(is_sink){
-        cout << "max flow: " << e_flow << "\n";
-    }
+//    if(is_sink){
+//        cout << "max flow: " << e_flow << "\n";
+//    }
 	
 	// usage of node storage
     node.storage(node_size{}) = 10;
@@ -274,7 +287,7 @@ MAIN() {
     node.storage(node_e_flow{}) = e_flow;
     node.storage(node_height{}) = old_v.height;
     node.storage(edges_num{}) = old_v.edges.size();
-
+    node.storage(max_flow{}) = is_sink ? e_flow : 0;
 }
 
 //! @brief Export types used by the main function (update it when expanding the program).
@@ -297,13 +310,16 @@ constexpr int node_num = 10;
 //! @brief Dimensionality of the space.
 constexpr size_t dim = 2;
 
+//! @brief When to end the simulation.
+constexpr size_t end = 1000;
+
 //! @brief Description of the round schedule.
-using round_s = sequence::periodic_n<1, 0, 1>;
+using round_s = sequence::periodic_n<1, 0, 2, end>;
 //    distribution::interval_n<times_t, 0, 1>,    // uniform time in the [0,1] interval for start
 //    distribution::weibull_n<times_t, 10, 1, 10> // weibull-distributed time for interval (10/10=1 mean, 1/10=0.1 deviation)
 //>;
 //! @brief The sequence of network snapshots (one every simulated second).
-using log_s = sequence::periodic_n<1, 0, 1>;
+using log_s = sequence::periodic_n<1, 1, 2, end>;
 //! @brief The sequence of node generation events (node_num devices all generated at time 0).
 using spawn_s = sequence::multiple_n<node_num, 0>;
 //! @brief The distribution of initial node positions (random in a 500x500 square).
@@ -316,12 +332,13 @@ using store_t = tuple_store<
     node_is_source,             bool,
     node_e_flow,                int,
     node_height,                int,
+    max_flow,                   int,
     edges_num,                  int,
-    edge_capacities,            field<double>
+    edge_capacities,            field<int>
 >;
 //! @brief The tags and corresponding aggregators to be logged (change as needed).
 using aggregator_t = aggregators<
-    node_size,                  aggregator::mean<double>
+    max_flow,                   aggregator::sum<int>
 >;
 
 //! @brief The general simulation options.
@@ -339,11 +356,12 @@ DECLARE_OPTIONS(list,
     area<0, 0, 500, 500>,
     init<
         node_size,  distribution::constant_n<size_t, 10>
+//        x,          rectangle_d
     >,
     node_attributes<
         uid,                device_t,
         x,                  vec<2>,
-        edge_capacities,    field<double>
+        edge_capacities,    field<int>
     >,
     dimension<dim>, // dimensionality of the space
     connector<connect::fixed<250, 1, dim>>, // connection allowed within a fixed comm range
