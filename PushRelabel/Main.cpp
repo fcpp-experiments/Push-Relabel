@@ -3,6 +3,7 @@
 #include <string>
 #include <sstream>
 #include <unordered_map>
+#include <map>
 #include <algorithm>
 #include "graph.hpp"
 #include "tests.hpp"
@@ -11,11 +12,14 @@
 
 void create_graph_file();
 graph get_graph();
+void create_test_aggregate(string);
 
 std::unordered_map<int, node*> node_map;
+std::map<int, std::vector<pair<int, string>>> string_map;
 
 int main() {
 	//create_graph_file();
+	//create_test_aggregate("test1");
 
 	graph g = get_graph();
 
@@ -29,8 +33,6 @@ int main() {
 	cout << "max flux: " << flux << " - time: " << duration.count() << "\n";
 
 	tests::start_tests();
-
-	
 
 	return 0;
 }
@@ -103,4 +105,51 @@ void create_graph_file() {
 	}
 
 	myfile.close();
+}
+
+void create_test_aggregate(string file_name) {
+	graph g = graph();
+	string line, s_arcs = "", s_nodes= "";
+	std::ifstream file;
+	std::ofstream nodes, arcs;
+	file.open("test_files\\" + file_name + ".txt");
+	nodes.open("input\\" + file_name + ".nodes");
+	arcs.open("input\\" + file_name  + ".arcs");
+
+	if (file.is_open()) {
+		while (getline(file, line)) {
+			std::stringstream s(line);
+			string s_u_id, s_v_id, s_capacity;
+
+			s >> s_u_id >> s_v_id >> s_capacity;
+			int u_id = stoi(s_u_id), v_id = stoi(s_v_id);
+
+			s_arcs += s_u_id + "\t" + s_v_id + "\n";
+			if(string_map.find(stoi(s_v_id)) == string_map.end()){
+				string_map[stoi(s_v_id)];
+			}
+			string_map[stoi(s_u_id)].push_back({ stoi(s_v_id), s_capacity});
+		}
+	}
+
+	arcs << s_arcs;
+	srand(time(NULL));
+	
+	for (auto& line : string_map) {
+		sort(line.second.begin(), line.second.end());
+		int n1 = rand() % 500, n2 = rand() % 500;
+		string capacities = "{";
+		for (pair<int, string> p : line.second) {
+			capacities += to_string(p.first) + ": " + p.second + ", ";
+		}
+		capacities += "*: 0}\n";
+
+		s_nodes += to_string(line.first) + " \t[" + to_string(n1) + ", " + to_string(n2) + "]\t " + capacities;
+	}
+
+	nodes << s_nodes;
+
+	file.close();
+	nodes.close();
+	arcs.close();
 }
