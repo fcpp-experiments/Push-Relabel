@@ -36,12 +36,9 @@ namespace tags {
     //! @brief Shape of the current node.
     struct node_shape {};
 
-    struct node_is_source {};
+    struct max_flow {};
     struct node_e_flow {};
     struct node_height {};
-    struct edges_num {};
-    struct max_flow {};
-
     //! @brief Capacity of edges
     struct edge_capacities {};
 }
@@ -52,129 +49,11 @@ constexpr size_t communication_range = 100;
 //! @brief Main function.
 //using position_type = vec<fcpp::component::tags::dimension>;
 
-struct queue_last_pushes{
-    std::vector<int> queue;
-    int age_first_el = 0;
-};
-
-struct edge{
-    int capacity = 0, flow = 0, d_flow_u = 0, d_flow_v = 0, u_id, v_id;
-    int v_age = 0, u_age = 0, u_age_o;
-    int d_flow_u_old = 0;
-    queue_last_pushes last_pushes;
-};
-
 struct old_values{
-    std::unordered_map<int, edge> edges;
+    field<long long> flow, pushes, others_pushes;
     int height = 0;
+    bool is_preflow = true;
 };
-
-int get_e_flow(std::unordered_map<int, edge> edges){
-    int e_flow = 0;
-    for (auto &e : edges) {
-        e_flow -= e.second.flow;
-    }
-
-    return e_flow;
-}
-
-bool compare_height(tuple<int, int> a, tuple<int, int> b, std::unordered_map<int, edge> edges){
-    bool is_min = get<0>(a) > get<0>(b) && (edges[get<1>(b)].capacity - edges[get<1>(b)].flow) > 0;
-    bool can_a_be_min = (get<0>(a) >= -1 ) && (edges[get<1>(a)].capacity - edges[get<1>(a)].flow) > 0;
-
-    return (!can_a_be_min || is_min);
-}
-
-FUN void set_nbr_edges(ARGS, std::unordered_map<int, edge> &edges, int source_id){
-    CODE
-
-    edge my_edge = edge();
-    my_edge.v_id = node.uid;
-
-    field<edge> edges_field = nbr(CALL, my_edge);
-
-    map_hood([&](edge e){
-        e.u_id = node.uid;
-
-        e.capacity = 8; //TODO: randomize
-        
-
-        if(e.v_id != node.uid){
-
-            if(e.v_id == 4){
-                e.capacity = 2;
-            }
-
-            // if(e.v_id == 1){
-            //     e.capacity = 1;
-            // }
-            
-            // if(e.v_id == 7){
-            //     e.capacity = 1;
-            // }
-
-            if(node.uid == 1){
-                e.capacity = 1;
-            }
-
-            if(node.uid == source_id){
-                e.d_flow_u = e.capacity;
-            }
-
-            edges[e.v_id] = e;
-        }
-        return e;
-    }, edges_field);
-}
-
-FUN void reverse_u_flow(ARGS, std::unordered_map<int, edge> &edges){
-    CODE
-    int uid = node.uid;
-
-    field<std::unordered_map<int, edge>> nbr_edges = nbr(CALL, edges);
-    map_hood([&](std::unordered_map<int, edge> edge_map){
-        int reverse_id = edge_map[uid].u_id;
-
-        if(edges.find(reverse_id) != edges.end()){
-            if(reverse_id != uid && edges[reverse_id].u_age_o < edge_map[uid].u_age){
-                int i = edges[reverse_id].u_age_o - edge_map[uid].last_pushes.age_first_el;
-                std::vector<int> q = edge_map[uid].last_pushes.queue;
-                for(; i < q.size(); i++){
-                    edges[reverse_id].d_flow_v -= q.at(i);
-                }
-            }
-
-            if(edge_map[uid].d_flow_u_old > 0){
-                edges[reverse_id].u_age_o = edge_map[uid].u_age;
-            }
-
-            edges[reverse_id].v_age = edge_map[uid].u_age_o;
-        }
-
-        return edge_map;
-    }, nbr_edges);
-}
-
-FUN void normalize_edges(ARGS, std::unordered_map<int, edge> &edges){
-    CODE
-
-    for (auto &e : edges) {
-        if(e.second.d_flow_u > 0){
-            e.second.last_pushes.queue.erase(e.second.last_pushes.queue.begin(), e.second.last_pushes.queue.begin() + 
-                                                                                    (e.second.v_age - e.second.last_pushes.age_first_el));
-            e.second.last_pushes.age_first_el = e.second.v_age;
-            e.second.last_pushes.queue.push_back(e.second.d_flow_u);
-
-            e.second.d_flow_u_old += e.second.d_flow_u;
-            e.second.u_age++;
-        }
-
-        e.second.flow += (e.second.d_flow_u + e.second.d_flow_v);
-
-        e.second.d_flow_u = 0;
-        e.second.d_flow_v = 0;
-    }
-}
 
 FUN void disperser(ARGS) { CODE
     vec<2> v = neighbour_elastic_force(CALL, 300, 0.03) + point_elastic_force(CALL, make_vec(250,250), 0, 0.005);
@@ -183,115 +62,95 @@ FUN void disperser(ARGS) { CODE
 }
 FUN_EXPORT disperser_t = export_list<neighbour_elastic_force_t, point_elastic_force_t>;
 
+
 MAIN() {
     // import tag names in the local scope.
     using namespace tags;
 	using namespace std;
 
+    bool is_source = node.uid == 1, is_sink = node.uid == 4;
+    long long e_flow = 0;
     disperser(CALL);
-    int source_id = 1, sink_id = 4;
 
-    bool is_source = false, is_sink = false;
-    int uid = node.uid;
-    int e_flow = 0;
-
-//    T data = nbr(CALL, init, [&](field<int> in_flow){
-//        field<int> out_flow = calcolo
-//        return make_tuple(data_to_return, out_flow);
-//    });
-//    tuple<> t = min_hood(CALL, make_tuple(field1, field2));
-//    field<> f = field1 + field2;
-//    field<double> f = map_hood([&](int x, double y, int z){
-//        return 4.5;
-//    }, f1, f2, f3);
-//    int k = fold_hood([&](device_t id?, int x, int acc){
-//        return x + acc;
-//    }, f, base?)
+    field<long long> capacity = node.storage(edge_capacities{});
 
     old_values old_v;
     old_v = old(CALL, old_v, [&](old_values edges_height){
-
         int &height = edges_height.height;
-
-        unordered_map<int, edge> &edges = edges_height.edges; // key: uid | value: edge
-        field<int> flow;
-
-        if(uid == source_id){
-            is_source = true;
-            height = 10;
-        }
+        field<long long> &flow = edges_height.flow;
+        field<long long> &pushes = edges_height.pushes;
+        field<long long> &others_pushes = edges_height.others_pushes;
 
 
-        if(uid == sink_id){
-            is_sink = true;
-        }
+        field<long long> new_flow = nbr(CALL, 0);
 
-        int nbr_num = sum_hood(CALL, nbr(CALL, 1));
+        bool is_preflow = false;
 
-        //TODO: remove is_neighbor_source ?
-
-        if(edges.size() < nbr_num - 1){
-            // -- PREFLOW --
-            set_nbr_edges(CALL, edges, source_id);
-        }else{
-            e_flow = get_e_flow(edges);
-
-            field<tuple<int, int>> height_field = nbr(CALL, make_tuple(height, uid));
-
-            if(!is_source && !is_sink && e_flow > 0){
-                tuple<int, int> min_height = make_tuple(-1, uid);
-
-                height_field = map_hood([&](tuple<int, int> b){ // TODO: try using fold
-                    if(compare_height(min_height, b, edges)){
-                        min_height = b;
-                    }
-
-                    return b;
-                }, height_field);
-
-                // min_height = fold_hood(CALL, [&](tuple<int, int> p1, tuple<int, int> p2){
-                //     cout << "COMPARING: " << uid << " - " << get<1>(p1) << " - " << get<1>(p2) << " - " << get<0>(p1) << " - " << get<0>(p2) << "\n";
-
-                //     if(compare_height(p1, p2, edges)){
-                //         return p1;
-                //     }
-                //     return p2;
-                // }, height_field, min_height);
-
-
-                if(height > get<0>(min_height)){ // push
-                    int push_flow = min(edges[get<1>(min_height)].capacity - edges[get<1>(min_height)].flow, e_flow);
-                    edges[get<1>(min_height)].d_flow_u += push_flow;
-                }else{ // relabel
-                    height = get<0>(min_height) + 1;
-                }
+        // PREFLOW
+        if(edges_height.is_preflow){
+            edges_height.is_preflow = false;
+            is_preflow = true;
+            flow = nbr(CALL, 0);
+            pushes = nbr(CALL, 0);
+            others_pushes = nbr(CALL, 0);
+            new_flow = flow;
+            if(is_source){
+                height = 4; // TODO: change to number of nodes
+                
+                new_flow = map_hood([&](int x, int y){
+                    x = y;
+                    return x;
+                }, flow, capacity);
             }
+        }
+        e_flow = sum_hood(CALL, -flow, 0);
 
-            reverse_u_flow(CALL, edges);
-            normalize_edges(CALL, edges);
+
+        // tuple<field<int>, field<int>> height_field = make_tuple(nbr(CALL, height), nbr_uid(CALL));
+        // tuple<int, int> min_height = min_hood(CALL, mux(capacity - flow > 0 && get<1>(height_field) != node.uid && !is_sink && !is_source && e_flow > 0, 
+        //                                         height_field, make_tuple(999, 999)));
+
+
+        int uid = node.uid;
+        tuple<int, int> min_height = nbr(CALL, make_tuple(height, uid), [&](field<tuple<int, int>> h){
+            tuple<int, int> min = min_hood(CALL, mux(capacity - flow > 0 && get<1>(h) != uid && !is_sink && !is_source && e_flow > 0, h, make_tuple(999, 999)));
+            if(get<0>(min) >= height && get<1>(min) != uid && e_flow > 0 && !is_source && !is_sink){
+                height = get<0>(min) + 1;
+            }
+            return make_tuple(min, make_tuple(height, uid));
+        });
+
+        field<long long> res_capacity = capacity - flow;
+        tuple<field<long long>, field<int>> res_cap_id = make_tuple(res_capacity, nbr_uid(CALL));
+        if(!is_preflow && !is_source && !is_sink){
+            new_flow = mux(get<1>(min_height) == get<1>(res_cap_id) && e_flow > 0, min(get<0>(res_cap_id), e_flow), 0ll);
         }
 
+        if(get<0>(min_height) >= height && e_flow > 0 && !is_source && !is_sink){
+            height = get<0>(min_height) + 1;
+        }
+
+        pushes += new_flow;
+        field<long long> f = nbr(CALL, 0, pushes);
+
+        others_pushes = f - others_pushes;
+        flow = flow - others_pushes + new_flow;
+        others_pushes = f;
+        
         return edges_height;
     });
 
-//    if(is_sink){
-//        cout << "max flow: " << e_flow << "\n";
-//    }
-	
 	// usage of node storage
     node.storage(node_size{}) = 10;
     node.storage(node_color{}) = color(GREEN);
     node.storage(node_shape{}) = shape::sphere;
-
-    node.storage(node_is_source{}) = is_source;
     node.storage(node_e_flow{}) = e_flow;
     node.storage(node_height{}) = old_v.height;
-    node.storage(edges_num{}) = old_v.edges.size();
     node.storage(max_flow{}) = is_sink ? e_flow : 0;
 }
 
 //! @brief Export types used by the main function (update it when expanding the program).
-FUN_EXPORT main_t = export_list<disperser_t, double, int, bool, edge, std::unordered_map<int, edge>, old_values, tuple<int, int>>;
+FUN_EXPORT main_t = export_list<disperser_t, double, int, bool, old_values, tuple<int, int>, field<int>, long long, field<long long>>;
 
 } // namespace coordination
 
@@ -311,7 +170,7 @@ constexpr int node_num = 10;
 constexpr size_t dim = 2;
 
 //! @brief When to end the simulation.
-constexpr size_t end = 1000;
+constexpr size_t end = 2000000;
 
 //! @brief Description of the round schedule.
 using round_s = sequence::periodic_n<1, 0, 2, end>;
@@ -329,16 +188,14 @@ using store_t = tuple_store<
     node_color,                 color,
     node_size,                  double,
     node_shape,                 shape,
-    node_is_source,             bool,
-    node_e_flow,                int,
-    node_height,                int,
     max_flow,                   int,
-    edges_num,                  int,
-    edge_capacities,            field<int>
+    edge_capacities,            field<long long>,
+    node_e_flow,                long long,
+    node_height,                int
 >;
 //! @brief The tags and corresponding aggregators to be logged (change as needed).
 using aggregator_t = aggregators<
-    max_flow,                   aggregator::sum<int>
+    max_flow,                   aggregator::sum<long long>
 >;
 
 //! @brief The general simulation options.
@@ -361,7 +218,7 @@ DECLARE_OPTIONS(list,
     node_attributes<
         uid,                device_t,
         x,                  vec<2>,
-        edge_capacities,    field<int>
+        edge_capacities,    field<long long>
     >,
     dimension<dim>, // dimensionality of the space
     connector<connect::fixed<250, 1, dim>>, // connection allowed within a fixed comm range
@@ -380,7 +237,7 @@ int main(int argc, char *argv[]) {
     using namespace fcpp;
 
     // The name of files containing the network information.
-     const std::string file = "input/" + std::string(argc > 1 ? argv[1] : "test");
+    const std::string file = "input/" + std::string(argc > 1 ? argv[1] : "test1");
     // The network object type (interactive simulator with given options).
     using net_t = component::interactive_graph_simulator<option::list>::net;
     // The initialisation values (simulation name).
