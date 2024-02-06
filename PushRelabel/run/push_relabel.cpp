@@ -41,6 +41,7 @@ namespace tags {
     struct node_height {};
     //! @brief Capacity of edges
     struct edge_capacities {};
+    struct node_number {};
 }
 
 //! @brief The maximum communication range between nodes.
@@ -90,17 +91,14 @@ MAIN() {
         if(edges_height.is_preflow){
             edges_height.is_preflow = false;
             is_preflow = true;
-            flow = nbr(CALL, 0);
-            pushes = nbr(CALL, 0);
-            others_pushes = nbr(CALL, 0);
+            flow = 0;
+            pushes = 0;
+            others_pushes = 0;
             new_flow = flow;
             if(is_source){
-                height = 4; // TODO: change to number of nodes
+                height = node.net.storage(node_number{});
                 
-                new_flow = map_hood([&](int x, int y){
-                    x = y;
-                    return x;
-                }, flow, capacity);
+                new_flow = capacity;
             }
         }
         e_flow = sum_hood(CALL, -flow, 0);
@@ -136,7 +134,7 @@ MAIN() {
         others_pushes = f - others_pushes;
         flow = flow - others_pushes + new_flow;
         others_pushes = f;
-        
+
         return edges_height;
     });
 
@@ -224,7 +222,8 @@ DECLARE_OPTIONS(list,
     connector<connect::fixed<250, 1, dim>>, // connection allowed within a fixed comm range
     shape_tag<node_shape>, // the shape of a node is read from this tag in the store
     size_tag<node_size>,   // the size  of a node is read from this tag in the store
-    color_tag<node_color>  // the color of a node is read from this tag in the store
+    color_tag<node_color>,  // the color of a node is read from this tag in the store
+    net_store<node_number, int>
 );
 
 } // namespace option
@@ -241,10 +240,11 @@ int main(int argc, char *argv[]) {
     // The network object type (interactive simulator with given options).
     using net_t = component::interactive_graph_simulator<option::list>::net;
     // The initialisation values (simulation name).
-    auto init_v = common::make_tagged_tuple<option::name, option::nodesinput, option::arcsinput>(
+    auto init_v = common::make_tagged_tuple<option::name, option::nodesinput, option::arcsinput, option::node_number>(
         "Aggregate Push-Relabel",
         file + ".nodes",
-        file + ".arcs"
+        file + ".arcs",
+        4
     );
     // Construct the network object.
     net_t network{init_v};
