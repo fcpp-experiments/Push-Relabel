@@ -12,7 +12,7 @@
 #include <vector>
 #include "lib/deployment/hardware_identifier.hpp"
 #include <cmath>
-#include <unordered_map>
+#include <fstream>
 
 /**
  * @brief Namespace containing all the objects in the FCPP library.
@@ -69,7 +69,7 @@ MAIN() {
     using namespace tags;
 	using namespace std;
 
-    bool is_source = node.uid == 1, is_sink = node.uid == 4;
+    bool is_source = node.uid == 1, is_sink = node.uid == node.net.storage(node_number{});
     long long e_flow = 0;
     disperser(CALL);
 
@@ -81,7 +81,6 @@ MAIN() {
         field<long long> &flow = edges_height.flow;
         field<long long> &pushes = edges_height.pushes;
         field<long long> &others_pushes = edges_height.others_pushes;
-
 
         field<long long> new_flow = nbr(CALL, 0);
 
@@ -104,30 +103,32 @@ MAIN() {
         e_flow = sum_hood(CALL, -flow, 0);
 
 
-        // tuple<field<int>, field<int>> height_field = make_tuple(nbr(CALL, height), nbr_uid(CALL));
-        // tuple<int, int> min_height = min_hood(CALL, mux(capacity - flow > 0 && get<1>(height_field) != node.uid && !is_sink && !is_source && e_flow > 0, 
-        //                                         height_field, make_tuple(999, 999)));
+        tuple<field<int>, field<int>> height_field = make_tuple(nbr(CALL, height), nbr_uid(CALL));
+        tuple<int, int> min_height = min_hood(CALL, mux(capacity - flow > 0 && get<1>(height_field) != node.uid && !is_sink && !is_source && e_flow > 0, 
+                                                height_field, make_tuple(INT_MAX, INT_MAX)));
 
-
-        int uid = node.uid;
-        tuple<int, int> min_height = nbr(CALL, make_tuple(height, uid), [&](field<tuple<int, int>> h){
-            tuple<int, int> min = min_hood(CALL, mux(capacity - flow > 0 && get<1>(h) != uid && !is_sink && !is_source && e_flow > 0, h, make_tuple(999, 999)));
-            if(get<0>(min) >= height && get<1>(min) != uid && e_flow > 0 && !is_source && !is_sink){
-                height = get<0>(min) + 1;
-            }
-            return make_tuple(min, make_tuple(height, uid));
-        });
+        // Alternative method for calculating min_height:
+        //
+        // int uid = node.uid;
+        // tuple<int, int> min_height = nbr(CALL, make_tuple(height, uid), [&](field<tuple<int, int>> h){
+        //     tuple<int, int> min = min_hood(CALL, mux(capacity - flow > 0 && get<1>(h) != uid && !is_sink && !is_source && e_flow > 0, h, make_tuple(999, 999)));
+        //     if(get<0>(min) >= height && get<1>(min) != uid && e_flow > 0 && !is_source && !is_sink){
+        //         height = get<0>(min) + 1;
+        //     }
+        //     return make_tuple(min, make_tuple(height, uid));
+        // });
 
         field<long long> res_capacity = capacity - flow;
         tuple<field<long long>, field<int>> res_cap_id = make_tuple(res_capacity, nbr_uid(CALL));
-        if(!is_preflow && !is_source && !is_sink){
-            new_flow = mux(get<1>(min_height) == get<1>(res_cap_id) && e_flow > 0, min(get<0>(res_cap_id), e_flow), 0ll);
+        if(!is_preflow && !is_source && !is_sink && e_flow > 0){
+            new_flow = mux(get<1>(min_height) == get<1>(res_cap_id), min(get<0>(res_cap_id), e_flow), 0ll);
         }
 
         if(get<0>(min_height) >= height && e_flow > 0 && !is_source && !is_sink){
-            height = get<0>(min_height) + 1;
+            height = get<0>(min_height) + 1; // Relabel
         }
 
+        // Push
         pushes += new_flow;
         field<long long> f = nbr(CALL, 0, pushes);
 
@@ -186,7 +187,7 @@ using store_t = tuple_store<
     node_color,                 color,
     node_size,                  double,
     node_shape,                 shape,
-    max_flow,                   int,
+    max_flow,                   long long,
     edge_capacities,            field<long long>,
     node_e_flow,                long long,
     node_height,                int
@@ -230,6 +231,18 @@ DECLARE_OPTIONS(list,
 
 } // namespace fcpp
 
+int get_height_from_file(std::string file){
+    std::string line;
+    int n_nodes = 0;
+    std::ifstream myfile; 
+    myfile.open(file);
+    if ( myfile.is_open() ) {
+        myfile >> line;
+        n_nodes = stoi(line);
+        myfile.close();
+    }
+    return n_nodes;
+}
 
 //! @brief The main function.
 int main(int argc, char *argv[]) {
@@ -244,7 +257,7 @@ int main(int argc, char *argv[]) {
         "Aggregate Push-Relabel",
         file + ".nodes",
         file + ".arcs",
-        4
+        get_height_from_file(file + ".height")
     );
     // Construct the network object.
     net_t network{init_v};
