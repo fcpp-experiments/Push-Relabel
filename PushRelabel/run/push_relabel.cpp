@@ -82,10 +82,14 @@ MAIN() {
         field<long long> &pushes = edges_height.pushes;
         field<long long> &others_pushes = edges_height.others_pushes;
 
-        field<long long> new_flow = nbr(CALL, 0);
+        field<long long> new_flow = 0;
 
         bool is_preflow = false;
 
+        /*
+            TODO: questo if esegue il suo ramo solo al primo round da tutti i dispositivi
+                  per inizializzazioni?
+        */
         // PREFLOW
         if(edges_height.is_preflow){
             edges_height.is_preflow = false;
@@ -93,19 +97,24 @@ MAIN() {
             flow = 0;
             pushes = 0;
             others_pushes = 0;
-            new_flow = flow;
             if(is_source){
                 height = node.net.storage(node_number{});
                 
                 new_flow = capacity;
             }
         }
-        e_flow = sum_hood(CALL, -flow, 0);
+        e_flow = -sum_hood(CALL, flow, 0);
 
+        field<long long> res_capacity = capacity - flow;
 
         tuple<field<int>, field<int>> height_field = make_tuple(nbr(CALL, height), nbr_uid(CALL));
-        tuple<int, int> min_height = min_hood(CALL, mux(capacity - flow > 0 && get<1>(height_field) != node.uid && !is_sink && !is_source && e_flow > 0, 
+
+        tuple<int, int> min_height = min_hood(CALL, mux(res_capacity > 0 && get<1>(height_field) != node.uid && !is_sink && !is_source && e_flow > 0, 
                                                 height_field, make_tuple(INT_MAX, INT_MAX)));
+
+        /*
+            TODO: cancellare? o va ancora esplorata?
+        */
 
         // Alternative method for calculating min_height:
         //
@@ -118,22 +127,44 @@ MAIN() {
         //     return make_tuple(min, make_tuple(height, uid));
         // });
 
-        field<long long> res_capacity = capacity - flow;
+        // new_flow
         tuple<field<long long>, field<int>> res_cap_id = make_tuple(res_capacity, nbr_uid(CALL));
         if(!is_preflow && !is_source && !is_sink && e_flow > 0){
             new_flow = mux(get<1>(min_height) == get<1>(res_cap_id), min(get<0>(res_cap_id), e_flow), 0ll);
         }
 
+        /*
+            TODO: potrebbe essere che get<0>(min_height) sia INT_MAX?
+            se sì, occhio al possibile bug!
+        */
         if(get<0>(min_height) >= height && e_flow > 0 && !is_source && !is_sink){
             height = get<0>(min_height) + 1; // Relabel
         }
 
         // Push
+        /*
+            TODO: sono davvero necessari tre field diversi (flow, pushes, other_pushes)?
+                  non ne basterebbe una?
+                  per esempio:
+
+                  tuple<field<long long>, int> init(0, 0);
+                  if (is_source) get<1>(init) = node_number;
+                  nbr(CALL, init, [&](field<tuple<long long, int>> flow_height){
+                    field<long long> flow = get<0>(flow_height);
+                    field<int> height = get<1>(flow_height);
+
+                    quello che ricevo in flow è il flusso secondo i miei vicini
+                    calcolo e_flow
+                    calcolo min_height e quindi new_flow e new_height
+                    mando ai vicini flow+new_flow:
+
+                    return make_tuple(flow+new_flow, new_height);
+                  })
+        */
         pushes += new_flow;
         field<long long> f = nbr(CALL, 0, pushes);
 
-        others_pushes = f - others_pushes;
-        flow = flow - others_pushes + new_flow;
+        flow = flow - (f - others_pushes) + new_flow;
         others_pushes = f;
 
         return edges_height;
