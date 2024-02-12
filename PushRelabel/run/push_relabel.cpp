@@ -51,9 +51,8 @@ constexpr size_t communication_range = 100;
 //using position_type = vec<fcpp::component::tags::dimension>;
 
 struct old_values{
-    field<long long> flow, pushes, others_pushes;
     int height = 0;
-    bool is_preflow = true;
+    bool is_first_round = false;
 };
 
 FUN void disperser(ARGS) { CODE
@@ -75,99 +74,47 @@ MAIN() {
 
     field<long long> capacity = node.storage(edge_capacities{});
 
-    old_values old_v;
-    old_v = old(CALL, old_v, [&](old_values edges_height){
-        int &height = edges_height.height;
-        field<long long> &flow = edges_height.flow;
-        field<long long> &pushes = edges_height.pushes;
-        field<long long> &others_pushes = edges_height.others_pushes;
+    int height = 0;
+    
+    tuple<field<long long>, int> init(0, 0);
+    if (is_source) {
+        height = node.net.storage(node_number{});
+        get<0>(init) = capacity;
+        get<1>(init) = node.net.storage(node_number{});
+    }
 
+    nbr(CALL, init, [&](field<tuple<long long, int>> flow_height){
         field<long long> new_flow = 0;
+        field<long long> flow = -get<0>(flow_height);
+        field<int> nbr_height = get<1>(flow_height);
 
-        bool is_preflow = false;
+        height = get<1>(self(CALL, flow_height));
 
-        /*
-            TODO: questo if esegue il suo ramo solo al primo round da tutti i dispositivi
-                  per inizializzazioni?
-        */
-        // PREFLOW
-        if(edges_height.is_preflow){
-            edges_height.is_preflow = false;
-            is_preflow = true;
-            flow = 0;
-            pushes = 0;
-            others_pushes = 0;
-            if(is_source){
-                height = node.net.storage(node_number{});
-                
-                new_flow = capacity;
-            }
-        }
         e_flow = -sum_hood(CALL, flow, 0);
 
-        field<long long> res_capacity = capacity - flow;
-
-        tuple<field<int>, field<int>> height_field = make_tuple(nbr(CALL, height), nbr_uid(CALL));
-
-        tuple<int, int> min_height = min_hood(CALL, mux(res_capacity > 0 && get<1>(height_field) != node.uid && !is_sink && !is_source && e_flow > 0, 
-                                                height_field, make_tuple(INT_MAX, INT_MAX)));
-
-        /*
-            TODO: cancellare? o va ancora esplorata?
-        */
-
-        // Alternative method for calculating min_height:
-        //
-        // int uid = node.uid;
-        // tuple<int, int> min_height = nbr(CALL, make_tuple(height, uid), [&](field<tuple<int, int>> h){
-        //     tuple<int, int> min = min_hood(CALL, mux(capacity - flow > 0 && get<1>(h) != uid && !is_sink && !is_source && e_flow > 0, h, make_tuple(999, 999)));
-        //     if(get<0>(min) >= height && get<1>(min) != uid && e_flow > 0 && !is_source && !is_sink){
-        //         height = get<0>(min) + 1;
-        //     }
-        //     return make_tuple(min, make_tuple(height, uid));
-        // });
-
-        // new_flow
-        tuple<field<long long>, field<int>> res_cap_id = make_tuple(res_capacity, nbr_uid(CALL));
-        if(!is_preflow && !is_source && !is_sink && e_flow > 0){
-            new_flow = mux(get<1>(min_height) == get<1>(res_cap_id), min(get<0>(res_cap_id), e_flow), 0ll);
+        if(is_source){
+            flow = capacity;
         }
 
-        /*
-            TODO: potrebbe essere che get<0>(min_height) sia INT_MAX?
-            se sì, occhio al possibile bug!
-        */
-        if(get<0>(min_height) >= height && e_flow > 0 && !is_source && !is_sink){
+        field<long long> res_capacity = capacity - flow;
+        
+
+
+        tuple<field<int>, field<int>> height_field = make_tuple(nbr_height, nbr_uid(CALL));
+        tuple<int, int> min_height = min_hood(CALL, mux(res_capacity > 0 && !is_sink && !is_source && e_flow > 0
+                                                        && counter(CALL) > 1, height_field, make_tuple(INT_MAX, INT_MAX)));
+
+
+        if(get<0>(min_height) >= height && e_flow > 0 && !is_source && !is_sink && counter(CALL) > 1){
             height = get<0>(min_height) + 1; // Relabel
         }
 
-        // Push
-        /*
-            TODO: sono davvero necessari tre field diversi (flow, pushes, other_pushes)?
-                  non ne basterebbe una?
-                  per esempio:
+        tuple<field<long long>, field<int>> res_cap_id = make_tuple(res_capacity, nbr_uid(CALL));
+        if(!is_source && !is_sink && e_flow > 0 && counter(CALL) > 1){
+            new_flow = mux(get<1>(min_height) == get<1>(res_cap_id) && height == get<0>(min_height) + 1, min(get<0>(res_cap_id), e_flow), 0ll);
+        }
 
-                  tuple<field<long long>, int> init(0, 0);
-                  if (is_source) get<1>(init) = node_number;
-                  nbr(CALL, init, [&](field<tuple<long long, int>> flow_height){
-                    field<long long> flow = get<0>(flow_height);
-                    field<int> height = get<1>(flow_height);
-
-                    quello che ricevo in flow è il flusso secondo i miei vicini
-                    calcolo e_flow
-                    calcolo min_height e quindi new_flow e new_height
-                    mando ai vicini flow+new_flow:
-
-                    return make_tuple(flow+new_flow, new_height);
-                  })
-        */
-        pushes += new_flow;
-        field<long long> f = nbr(CALL, 0, pushes);
-
-        flow = flow - (f - others_pushes) + new_flow;
-        others_pushes = f;
-
-        return edges_height;
+        return make_tuple(flow + new_flow, height);
     });
 
 	// usage of node storage
@@ -175,12 +122,12 @@ MAIN() {
     node.storage(node_color{}) = color(GREEN);
     node.storage(node_shape{}) = shape::sphere;
     node.storage(node_e_flow{}) = e_flow;
-    node.storage(node_height{}) = old_v.height;
+    node.storage(node_height{}) = height;
     node.storage(max_flow{}) = is_sink ? e_flow : 0;
 }
 
 //! @brief Export types used by the main function (update it when expanding the program).
-FUN_EXPORT main_t = export_list<disperser_t, double, int, bool, old_values, tuple<int, int>, field<int>, long long, field<long long>>;
+FUN_EXPORT main_t = export_list<disperser_t, double, int, bool, old_values, tuple<int, int>, field<int>, long long, field<long long>, field<tuple<long long, int>>, tuple<field<long long>, int>>;
 
 } // namespace coordination
 
@@ -280,7 +227,7 @@ int main(int argc, char *argv[]) {
     using namespace fcpp;
 
     // The name of files containing the network information.
-    const std::string file = "input/" + std::string(argc > 1 ? argv[1] : "test1");
+    const std::string file = "input/" + std::string(argc > 1 ? argv[1] : "test2");
     // The network object type (interactive simulator with given options).
     using net_t = component::interactive_graph_simulator<option::list>::net;
     // The initialisation values (simulation name).
