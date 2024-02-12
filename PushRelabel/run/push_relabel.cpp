@@ -8,8 +8,6 @@
 // [INTRODUCTION]
 //! Importing the FCPP library.
 #include "lib/fcpp.hpp"
-#include <list>
-#include <vector>
 #include "lib/deployment/hardware_identifier.hpp"
 #include <cmath>
 #include <fstream>
@@ -50,11 +48,6 @@ constexpr size_t communication_range = 100;
 //! @brief Main function.
 //using position_type = vec<fcpp::component::tags::dimension>;
 
-struct old_values{
-    int height = 0;
-    bool is_first_round = false;
-};
-
 FUN void disperser(ARGS) { CODE
     vec<2> v = neighbour_elastic_force(CALL, 300, 0.03) + point_elastic_force(CALL, make_vec(250,250), 0, 0.005);
     if (isnan(v[0]) or isnan(v[1])) v = make_vec(0,0);
@@ -75,15 +68,14 @@ MAIN() {
     field<long long> capacity = node.storage(edge_capacities{});
 
     int height = 0;
-    
-    tuple<field<long long>, int> init(0, 0);
+    tuple<field<long long>, int, bool> init(0, 0, is_sink);
     if (is_source) {
         height = node.net.storage(node_number{});
         get<0>(init) = capacity;
         get<1>(init) = node.net.storage(node_number{});
     }
 
-    nbr(CALL, init, [&](field<tuple<long long, int>> flow_height){
+    nbr(CALL, init, [&](field<tuple<long long, int, bool>> flow_height){
         field<long long> new_flow = 0;
         field<long long> flow = -get<0>(flow_height);
         field<int> nbr_height = get<1>(flow_height);
@@ -97,24 +89,31 @@ MAIN() {
         }
 
         field<long long> res_capacity = capacity - flow;
-        
-
 
         tuple<field<int>, field<int>> height_field = make_tuple(nbr_height, nbr_uid(CALL));
-        tuple<int, int> min_height = min_hood(CALL, mux(res_capacity > 0 && !is_sink && !is_source && e_flow > 0
-                                                        && counter(CALL) > 1, height_field, make_tuple(INT_MAX, INT_MAX)));
+        tuple<int, int> min_height = min_hood(CALL, mux(res_capacity > 0 && !is_sink && !is_source && e_flow > 0, height_field, make_tuple(INT_MAX, INT_MAX)));
 
 
-        if(get<0>(min_height) >= height && e_flow > 0 && !is_source && !is_sink && counter(CALL) > 1){
+        if(get<0>(min_height) >= height && e_flow > 0 && !is_source && !is_sink){
             height = get<0>(min_height) + 1; // Relabel
         }
 
         tuple<field<long long>, field<int>> res_cap_id = make_tuple(res_capacity, nbr_uid(CALL));
-        if(!is_source && !is_sink && e_flow > 0 && counter(CALL) > 1){
+        if(!is_source && !is_sink && e_flow > 0){
             new_flow = mux(get<1>(min_height) == get<1>(res_cap_id) && height == get<0>(min_height) + 1, min(get<0>(res_cap_id), e_flow), 0ll);
         }
 
-        return make_tuple(flow + new_flow, height);
+        field<bool> exist_path_to_sink = mux(res_capacity > 0 && get<2>(flow_height), true, false);
+
+        bool reset = fold_hood(CALL, [&](bool a, bool b){
+            return a || b;
+        }, exist_path_to_sink);
+        
+        if(reset && height > node.net.storage(node_number{})){ // reset height if there's a path with residual capacity to sink and current node height is > than node number
+            height = 0;
+        }
+
+        return make_tuple(flow + new_flow, height, is_sink || reset);
     });
 
 	// usage of node storage
@@ -127,7 +126,8 @@ MAIN() {
 }
 
 //! @brief Export types used by the main function (update it when expanding the program).
-FUN_EXPORT main_t = export_list<disperser_t, double, int, bool, old_values, tuple<int, int>, field<int>, long long, field<long long>, field<tuple<long long, int>>, tuple<field<long long>, int>>;
+FUN_EXPORT main_t = export_list<disperser_t, double, int, bool, tuple<int, int>, field<int>, long long, field<long long>, field<tuple<long long, int, bool>>, 
+                                tuple<field<long long>, int, bool>>;
 
 } // namespace coordination
 
@@ -227,7 +227,7 @@ int main(int argc, char *argv[]) {
     using namespace fcpp;
 
     // The name of files containing the network information.
-    const std::string file = "input/" + std::string(argc > 1 ? argv[1] : "test2");
+    const std::string file = "input/" + std::string(argc > 1 ? argv[1] : "test10");
     // The network object type (interactive simulator with given options).
     using net_t = component::interactive_graph_simulator<option::list>::net;
     // The initialisation values (simulation name).
