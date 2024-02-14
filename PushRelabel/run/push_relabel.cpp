@@ -11,6 +11,7 @@
 #include "lib/deployment/hardware_identifier.hpp"
 #include <cmath>
 #include <fstream>
+#include <cassert>
 
 /**
  * @brief Namespace containing all the objects in the FCPP library.
@@ -60,8 +61,8 @@ MAIN() {
     // import tag names in the local scope.
     using namespace tags;
 	using namespace std;
-
-    bool is_source = node.uid == 1, is_sink = node.uid == node.net.storage(node_number{});
+    device_t source_id = node.current_time() < 100 ? 1 : 1, sink_id = node.current_time() < 300 ? node.net.storage(node_number{}) : 5;
+    bool is_source = node.uid == source_id, is_sink = node.uid == sink_id;
     long long e_flow = 0;
     disperser(CALL);
 
@@ -84,23 +85,40 @@ MAIN() {
 
         e_flow = -sum_hood(CALL, flow, 0);
 
-        if(is_source){
-            flow = capacity;
+        if(!is_source && e_flow < 0){
+            flow = map_hood([&](long long f){
+                if(f > 0){
+                    long long r = min(-e_flow, f);
+                    f -= r;
+                    e_flow -= r;
+                }
+                return f;
+            }, flow);
         }
 
         field<long long> res_capacity = capacity - flow;
 
+        if(is_source){
+            if(height < node.net.storage(node_number{})){
+                height = node.net.storage(node_number{});
+            }
+            flow = capacity;
+        }else if(is_sink){
+            height = 0;
+        }
+
         tuple<field<int>, field<int>> height_field = make_tuple(nbr_height, nbr_uid(CALL));
-        tuple<int, int> min_height = min_hood(CALL, mux(res_capacity > 0 && !is_sink && !is_source && e_flow > 0, height_field, make_tuple(INT_MAX, INT_MAX)));
+        tuple<int, int> min_height = min_hood(CALL, mux(res_capacity > 0, height_field, make_tuple(INT_MAX, INT_MAX)));
 
 
         if(get<0>(min_height) >= height && e_flow > 0 && !is_source && !is_sink){
+            assert(min_height != make_tuple(INT_MAX, INT_MAX));
             height = get<0>(min_height) + 1; // Relabel
         }
 
         tuple<field<long long>, field<int>> res_cap_id = make_tuple(res_capacity, nbr_uid(CALL));
         if(!is_source && !is_sink && e_flow > 0){
-            new_flow = mux(get<1>(min_height) == get<1>(res_cap_id) && height == get<0>(min_height) + 1, min(get<0>(res_cap_id), e_flow), 0ll);
+            new_flow = mux(get<1>(min_height) == get<1>(res_cap_id) && height >= get<0>(min_height) + 1, min(get<0>(res_cap_id), e_flow), 0ll);
         }
 
         field<bool> exist_path_to_sink = mux(res_capacity > 0 && get<2>(flow_height), true, false);
@@ -108,9 +126,10 @@ MAIN() {
         bool reset = fold_hood(CALL, [&](bool a, bool b){
             return a || b;
         }, exist_path_to_sink);
-        
-        if(reset && height > node.net.storage(node_number{})){ // reset height if there's a path with residual capacity to sink and current node height is > than node number
-            height = 0;
+
+        if(is_source && reset){
+            height += node.net.storage(node_number{});
+            reset = false;
         }
 
         return make_tuple(flow + new_flow, height, is_sink || reset);
@@ -227,7 +246,7 @@ int main(int argc, char *argv[]) {
     using namespace fcpp;
 
     // The name of files containing the network information.
-    const std::string file = "input/" + std::string(argc > 1 ? argv[1] : "test10");
+    const std::string file = "input/" + std::string(argc > 1 ? argv[1] : "test12");
     // The network object type (interactive simulator with given options).
     using net_t = component::interactive_graph_simulator<option::list>::net;
     // The initialisation values (simulation name).
