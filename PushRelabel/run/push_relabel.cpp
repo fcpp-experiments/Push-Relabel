@@ -56,15 +56,21 @@ FUN void disperser(ARGS) { CODE
 }
 FUN_EXPORT disperser_t = export_list<neighbour_elastic_force_t, point_elastic_force_t>;
 
-
 MAIN() {
     // import tag names in the local scope.
     using namespace tags;
 	using namespace std;
-    device_t source_id = node.current_time() < 100 ? 1 : 1, sink_id = node.current_time() < 300 ? node.net.storage(node_number{}) : 5;
+    
+    device_t source_id = node.current_time() < 100 ? 2 : 1, sink_id = node.current_time() < 100 ? node.net.storage(node_number{}) : 3;
     bool is_source = node.uid == source_id, is_sink = node.uid == sink_id;
     long long e_flow = 0;
+
     disperser(CALL);
+    
+    // use for testing, change capacity after a certain amount of time
+    if(node.uid == 4 && node.current_time() > 200){
+        node.storage(edge_capacities{}) = 10;
+    }
 
     field<long long> capacity = node.storage(edge_capacities{});
 
@@ -85,6 +91,9 @@ MAIN() {
 
         e_flow = -sum_hood(CALL, flow, 0);
 
+        flow = mux(flow > node.storage(edge_capacities{}), node.storage(edge_capacities{}), flow);
+
+        // if a node is giving away more flow than it receives, stop giving excess
         if(!is_source && e_flow < 0){
             flow = map_hood([&](long long f){
                 if(f > 0){
@@ -105,10 +114,11 @@ MAIN() {
             flow = capacity;
         }else if(is_sink){
             height = 0;
+            flow = mux(flow > 0, 0ll, flow);
         }
 
         tuple<field<int>, field<int>> height_field = make_tuple(nbr_height, nbr_uid(CALL));
-        tuple<int, int> min_height = min_hood(CALL, mux(res_capacity > 0, height_field, make_tuple(INT_MAX, INT_MAX)));
+        tuple<int, int> min_height = min_hood(CALL, mux(res_capacity > 0 && get<1>(height_field) != node.uid, height_field, make_tuple(INT_MAX, INT_MAX)));
 
 
         if(get<0>(min_height) >= height && e_flow > 0 && !is_source && !is_sink){
@@ -121,18 +131,22 @@ MAIN() {
             new_flow = mux(get<1>(min_height) == get<1>(res_cap_id) && height >= get<0>(min_height) + 1, min(get<0>(res_cap_id), e_flow), 0ll);
         }
 
-        field<bool> exist_path_to_sink = mux(res_capacity > 0 && get<2>(flow_height), true, false);
+        field<bool> exist_path_to_sink = false;
+        bool reset = max_hood(CALL, mux(res_capacity > 0 && get<2>(flow_height), true, false));
 
-        bool reset = fold_hood(CALL, [&](bool a, bool b){
-            return a || b;
-        }, exist_path_to_sink);
+        if(is_sink){
+            exist_path_to_sink = true;
+        }else{
+            exist_path_to_sink = mux(!get<2>(flow_height) && reset, true, false);
 
-        if(is_source && reset){
-            height += node.net.storage(node_number{});
-            reset = false;
+            // if there is a path to sink with residual capacity increment source height
+            if(is_source && reset){
+                height += node.net.storage(node_number{});
+                exist_path_to_sink = false;
+            }
         }
 
-        return make_tuple(flow + new_flow, height, is_sink || reset);
+        return make_tuple(flow + new_flow, height, exist_path_to_sink);
     });
 
 	// usage of node storage
@@ -146,7 +160,7 @@ MAIN() {
 
 //! @brief Export types used by the main function (update it when expanding the program).
 FUN_EXPORT main_t = export_list<disperser_t, double, int, bool, tuple<int, int>, field<int>, long long, field<long long>, field<tuple<long long, int, bool>>, 
-                                tuple<field<long long>, int, bool>>;
+                                tuple<field<long long>, int, field<bool>>>;
 
 } // namespace coordination
 
@@ -246,7 +260,7 @@ int main(int argc, char *argv[]) {
     using namespace fcpp;
 
     // The name of files containing the network information.
-    const std::string file = "input/" + std::string(argc > 1 ? argv[1] : "test12");
+    const std::string file = "input/" + std::string(argc > 1 ? argv[1] : "test3");
     // The network object type (interactive simulator with given options).
     using net_t = component::interactive_graph_simulator<option::list>::net;
     // The initialisation values (simulation name).
