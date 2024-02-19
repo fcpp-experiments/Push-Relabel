@@ -7,41 +7,41 @@
 #include <sstream>
 #include <unordered_map>
 
-#include "lib/openmp.hpp"
+#include "../lib/openmp.hpp"
 
 
 void create_graph_file();
-graph get_graph();
+graph get_graph(string);
 void create_test_aggregate(string);
 
 std::unordered_map<int, node*> node_map;
 std::map<int, std::vector<pair<int, string>>> string_map;
 
 int main() {
-	//create_graph_file();
-	//create_test_aggregate("test1");
 
-	graph g = get_graph();
+	// create_graph_file();
+	// create_test_aggregate("test1");
 
+	graph g = get_graph("../test_files/test1.txt");
 	auto start = chrono::high_resolution_clock::now();
 
-	long long flux = g.get_max_flow(*node_map[1], *node_map[126]);
+	long long flow = g.get_max_flow(*node_map[1], *node_map[4]);
 
 	auto stop = chrono::high_resolution_clock::now();
 	auto duration = chrono::duration_cast<chrono::microseconds> (stop - start);
 
-	cout << "max flux: " << flux << " - time: " << duration.count() << "\n";
+	cout << "max flux: " << flow << " - time: " << duration.count() << "\n";
 
 	tests::start_tests();
 
 	return 0;
 }
 
-graph get_graph() {
+graph get_graph(string file_name) {
 	graph g = graph();
 	string line;
 	std::ifstream file;
-	file.open("graph4.txt");
+	file.open(file_name);
 
 	if (file.is_open()) {
 		while (getline(file, line)) {
@@ -66,6 +66,7 @@ graph get_graph() {
 			g.add_edge(*node_map[u_id], *node_map[v_id], stoll(s_capacity));
 
 		}
+		file.close();
 	}
 
 	return g;
@@ -77,7 +78,7 @@ void create_graph_file() {
 
 	vector<int> node_neighbors;
 	ofstream myfile;
-	myfile.open("graph1.txt");
+	myfile.open("../test_files/graph1.txt");
 
 	srand((unsigned)time(NULL));
 
@@ -112,7 +113,7 @@ void create_test_aggregate(string file_name) {
 	string line, s_arcs = "", s_nodes= "";
 	std::ifstream file;
 	std::ofstream nodes, arcs;
-	file.open("test_files\\" + file_name + ".txt");
+	file.open("..\\test_files\\" + file_name + ".txt");
 	nodes.open("input\\" + file_name + ".nodes");
 	arcs.open("input\\" + file_name  + ".arcs");
 
