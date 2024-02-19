@@ -13,6 +13,8 @@
 //! Importing the FCPP library.
 #include "lib/fcpp.hpp"
 
+#include "../lib/openmp.hpp"
+
 /**
  * @brief Namespace containing all the objects in the FCPP library.
  */
@@ -279,11 +281,12 @@ int file_to_number(std::string path){
 //! @brief The main function.
 int main(int argc, char *argv[]) {
     using namespace fcpp;
-
+    // The default name of the files containing the network information
+    const std::string default_file = "test2";
     // The name of files containing the network information.
-    const std::string file = "input/" + std::string(argc > 1 ? argv[1] : "test14");
+    const std::string file = "input/" + std::string(argc > 1 ? argv[1] : default_file);
     // The ideal maximum flow.
-    std::vector<long long> flows = {0, 0, 0, 0, 0, 0}; // TODO: actually calculate
+    std::vector<long long> flows = tests::get_flows("../test_files/" + std::string(argc > 1 ? argv[1] : default_file) + ".txt", file_to_number(file + ".size"));
 
     // Set up the plotting object.
     fcpp::option::plot_t p;
