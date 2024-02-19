@@ -1,28 +1,27 @@
-// Copyright © 2021 Giorgio Audrito. All Rights Reserved.
+// Copyright © 2024 Giorgio Audrito and Stefano Manescotto. All Rights Reserved.
 
 /**
- * @file exercises.cpp
- * @brief Quick-start aggregate computing exercises.
+ * @file aggregate.cpp
+ * @brief Implementation and test of the Aggregate Push-Relabel algorithm.
  */
 
-// [INTRODUCTION]
-//! Importing the FCPP library.
-#include "lib/fcpp.hpp"
-#include "lib/deployment/hardware_identifier.hpp"
+//! Standard C++ imports.
+#include <cassert>
 #include <cmath>
 #include <fstream>
-#include <cassert>
+
+//! Importing the FCPP library.
+#include "lib/fcpp.hpp"
 
 /**
  * @brief Namespace containing all the objects in the FCPP library.
  */
 namespace fcpp {
 
-//! @brief Dummy ordering between positions (allows positions to be used as secondary keys in ordered tuples).
-template <size_t n>
-bool operator<(vec<n> const&, vec<n> const&) {
-    return false;
-}
+//! @brief Dimensionality of the space.
+constexpr size_t dim = 2;
+//! @brief The size of the simulation area.
+constexpr size_t area_size = 500;
 
 //! @brief Namespace containing the libraries of coordination routines.
 namespace coordination {
@@ -35,64 +34,68 @@ namespace tags {
     //! @brief Shape of the current node.
     struct node_shape {};
 
-    struct max_flow {};
-    struct node_e_flow {};
+    //! @brief Outward flow at the sink
+    struct sink_flow {};
+    //! @brief Inward flow at the source
+    struct source_flow {};
+    //! @brief Ideal exact flow
+    struct ideal_flow {};
+    //! @brief History of the ideal exact flow
+    struct ideal_flow_history {};
+
+    //! @brief Excess flow at each node
+    struct excess_flow {};
+    //! @brief Node heights
     struct node_height {};
+
     //! @brief Capacity of edges
     struct edge_capacities {};
+    //! @brief Total number of nodes
     struct node_number {};
 }
 
-//! @brief The maximum communication range between nodes.
-constexpr size_t communication_range = 100;
-
-//! @brief Main function.
-//using position_type = vec<fcpp::component::tags::dimension>;
-
+//! @brief Function for moving devices according to the network topology.
 FUN void disperser(ARGS) { CODE
-    vec<2> v = neighbour_elastic_force(CALL, 300, 0.03) + point_elastic_force(CALL, make_vec(250,250), 0, 0.005);
+    vec<2> v = neighbour_elastic_force(CALL, 0.2*area_size, 0.03) + point_elastic_force(CALL, make_vec(area_size,area_size)/2, 0, 0.005);
     if (isnan(v[0]) or isnan(v[1])) v = make_vec(0,0);
     node.velocity() = v;
 }
+//! @brief Export types used by the disperser function.
 FUN_EXPORT disperser_t = export_list<neighbour_elastic_force_t, point_elastic_force_t>;
 
+//! @brief Main function.
 MAIN() {
     // import tag names in the local scope.
     using namespace tags;
-	using namespace std;
-    
-    device_t source_id = node.current_time() < 100 ? 2 : 1, sink_id = node.current_time() < 100 ? node.net.storage(node_number{}) : 3;
-    bool is_source = node.uid == source_id, is_sink = node.uid == sink_id;
-    long long e_flow = 0;
-
+    using namespace std;
     disperser(CALL);
     
-    // use for testing, change capacity after a certain amount of time
-    if(node.uid == 4 && node.current_time() > 200){
-        node.storage(edge_capacities{}) = 10;
-    }
-
+    int node_num = node.net.storage(node_number{});
     field<long long> capacity = node.storage(edge_capacities{});
 
-    int height = 0;
-    tuple<field<long long>, int, bool> init(0, 0, is_sink);
-    if (is_source) {
-        height = node.net.storage(node_number{});
-        get<0>(init) = capacity;
-        get<1>(init) = node.net.storage(node_number{});
-    }
+    bool is_source = (node.current_time() < 300 and node.uid == 1) or (node.current_time() > 100 and node.uid == 2);
+    bool is_sink = (node.current_time() < 400 and node.uid == node_num) or (node.current_time() > 200 and node.uid == node_num-1);
 
+    // use for testing, change capacity after a certain amount of time
+//    if(node.uid == 4 && node.current_time() > 200){
+//        node.storage(edge_capacities{}) = 10;
+//    }
+
+    long long e_flow = 0;
+    int height = is_source ? node_num : 0;
+    tuple<field<long long>, int, bool> init(is_source ? capacity : 0, height, is_sink);
+    
     nbr(CALL, init, [&](field<tuple<long long, int, bool>> flow_height){
         field<long long> new_flow = 0;
         field<long long> flow = -get<0>(flow_height);
         field<int> nbr_height = get<1>(flow_height);
-
+        
         height = get<1>(self(CALL, flow_height));
-
+        
         e_flow = -sum_hood(CALL, flow, 0);
-
+        
         flow = mux(flow > node.storage(edge_capacities{}), node.storage(edge_capacities{}), flow);
-
+        
         // if a node is giving away more flow than it receives, stop giving excess
         if(!is_source && e_flow < 0){
             flow = map_hood([&](long long f){
@@ -104,62 +107,64 @@ MAIN() {
                 return f;
             }, flow);
         }
-
+        
         field<long long> res_capacity = capacity - flow;
-
+        
         if(is_source){
-            if(height < node.net.storage(node_number{})){
-                height = node.net.storage(node_number{});
+            if(height < node_num){
+                height = node_num;
             }
             flow = capacity;
         }else if(is_sink){
             height = 0;
             flow = mux(flow > 0, 0ll, flow);
         }
-
+        
         tuple<field<int>, field<int>> height_field = make_tuple(nbr_height, nbr_uid(CALL));
         tuple<int, int> min_height = min_hood(CALL, mux(res_capacity > 0 && get<1>(height_field) != node.uid, height_field, make_tuple(INT_MAX, INT_MAX)));
-
-
+        
+        
         if(get<0>(min_height) >= height && e_flow > 0 && !is_source && !is_sink){
             assert(min_height != make_tuple(INT_MAX, INT_MAX));
             height = get<0>(min_height) + 1; // Relabel
         }
-
+        
         tuple<field<long long>, field<int>> res_cap_id = make_tuple(res_capacity, nbr_uid(CALL));
         if(!is_source && !is_sink && e_flow > 0){
             new_flow = mux(get<1>(min_height) == get<1>(res_cap_id) && height >= get<0>(min_height) + 1, min(get<0>(res_cap_id), e_flow), 0ll);
         }
-
+        
         field<bool> exist_path_to_sink = false;
         bool reset = max_hood(CALL, mux(res_capacity > 0 && get<2>(flow_height), true, false));
-
+        
         if(is_sink){
             exist_path_to_sink = true;
         }else{
             exist_path_to_sink = mux(!get<2>(flow_height) && reset, true, false);
-
+            
             // if there is a path to sink with residual capacity increment source height
             if(is_source && reset){
-                height += node.net.storage(node_number{});
+                height += node_num;
                 exist_path_to_sink = false;
             }
         }
-
+        
         return make_tuple(flow + new_flow, height, exist_path_to_sink);
     });
-
-	// usage of node storage
-    node.storage(node_size{}) = 10;
-    node.storage(node_color{}) = color(GREEN);
-    node.storage(node_shape{}) = shape::sphere;
-    node.storage(node_e_flow{}) = e_flow;
+    
+    node.storage(ideal_flow{}) = node.net.storage(ideal_flow_history{})[node.current_time() / 100];
+    node.storage(sink_flow{}) = is_sink ? e_flow : 0;
+    node.storage(source_flow{}) = is_source ? -e_flow : 0;
+    node.storage(excess_flow{}) = e_flow;
     node.storage(node_height{}) = height;
-    node.storage(max_flow{}) = is_sink ? e_flow : 0;
+
+    node.storage(node_size{}) = is_sink or is_source ? 15 : 5 + min(e_flow, 10LL);
+    node.storage(node_color{}) = color::hsva(height * 360 / node_num, 1, 1);
+    node.storage(node_shape{}) = is_sink ? shape::star : is_source ? shape::cube : shape::sphere;
 }
 
-//! @brief Export types used by the main function (update it when expanding the program).
-FUN_EXPORT main_t = export_list<disperser_t, double, int, bool, tuple<int, int>, field<int>, long long, field<long long>, field<tuple<long long, int, bool>>, 
+//! @brief Export types used by the MAIN function.
+FUN_EXPORT main_t = export_list<disperser_t, double, int, bool, tuple<int, int>, field<int>, long long, field<long long>, field<tuple<long long, int, bool>>,
                                 tuple<field<long long>, int, field<bool>>>;
 
 } // namespace coordination
@@ -174,84 +179,89 @@ using namespace component::tags;
 //! @brief Import tags used by aggregate functions.
 using namespace coordination::tags;
 
-//! @brief Number of people in the area.
-constexpr int node_num = 10;
-//! @brief Dimensionality of the space.
-constexpr size_t dim = 2;
-
 //! @brief When to end the simulation.
-constexpr size_t end = 2000000;
+constexpr size_t end = 500;
 
 //! @brief Description of the round schedule.
-using round_s = sequence::periodic_n<1, 0, 2, end>;
-//    distribution::interval_n<times_t, 0, 1>,    // uniform time in the [0,1] interval for start
-//    distribution::weibull_n<times_t, 10, 1, 10> // weibull-distributed time for interval (10/10=1 mean, 1/10=0.1 deviation)
-//>;
+template <bool sync>
+using round_s = std::conditional_t<
+    sync,
+    sequence::periodic_n<2, 1, 2, 2*end+2>,          // one round at every half second
+    sequence::periodic<
+        distribution::interval_n<times_t, 0, 1>,     // uniform time in the [0,1] interval for start
+        distribution::weibull_n<times_t, 10, 1, 10>, // weibull-distributed time for interval (10/10=1 mean, 1/10=0.1 deviation)
+        distribution::constant_n<times_t, end+3>
+    >
+>;
 //! @brief The sequence of network snapshots (one every simulated second).
-using log_s = sequence::periodic_n<1, 1, 2, end>;
-//! @brief The sequence of node generation events (node_num devices all generated at time 0).
-using spawn_s = sequence::multiple_n<node_num, 0>;
-//! @brief The distribution of initial node positions (random in a 500x500 square).
-using rectangle_d = distribution::rect_n<1, 0, 0, 500, 500>;
+using log_s = sequence::periodic_n<1, 1, 1, end>;
+//! @brief The distribution of initial node positions (random in a square).
+using rectangle_d = distribution::rect_n<1, 0, 0, area_size, area_size>;
 //! @brief The contents of the node storage as tags and associated types.
-using store_t = tuple_store<
+using store_t = node_store<
     node_color,                 color,
     node_size,                  double,
     node_shape,                 shape,
-    max_flow,                   long long,
+    sink_flow,                  long long,
+    source_flow,                long long,
+    ideal_flow,                 long long,
     edge_capacities,            field<long long>,
-    node_e_flow,                long long,
+    excess_flow,                long long,
     node_height,                int
 >;
 //! @brief The tags and corresponding aggregators to be logged (change as needed).
 using aggregator_t = aggregators<
-    max_flow,                   aggregator::sum<long long>
+    sink_flow,      aggregator::sum<long long>,
+    source_flow,    aggregator::sum<long long>,
+    ideal_flow,     aggregator::sum<long long>
 >;
+
+//! @brief Helper template for plotting multiple lines.
+template <typename... Ts>
+using lines_t = plot::join<plot::value<aggregator::sum<Ts>>...>;
+
+//! @brief Overall plot description.
+using plot_t = plot::split<plot::time, lines_t<sink_flow, source_flow, ideal_flow>>;
 
 //! @brief The general simulation options.
 DECLARE_OPTIONS(list,
-    parallel<true>,      // multithreading enabled on node rounds
-    synchronised<true>,  // optimise for asynchronous networks
+    parallel<true>,                // multithreading enabled on node rounds
+    synchronised<true>,            // optimise for asynchronous networks
     program<coordination::main>,   // program to be run (refers to MAIN above)
     exports<coordination::main_t>, // export type list (types used in messages)
     retain<metric::retain<2,1>>,   // messages are kept for 2 seconds before expiring
-    round_schedule<round_s>, // the sequence generator for round events on nodes
-    log_schedule<log_s>,     // the sequence generator for log events on the network
-    spawn_schedule<spawn_s>, // the sequence generator of node creation events on the network
-    store_t,       // the contents of the node storage
-    aggregator_t,  // the tags and corresponding aggregators to be logged
-    area<0, 0, 500, 500>,
-    init<
-        node_size,  distribution::constant_n<size_t, 10>
-//        x,          rectangle_d
+    round_schedule<round_s<true>>, // the sequence generator for round events on nodes
+    log_schedule<log_s>,           // the sequence generator for log events on the network
+    net_store<                     // overall parameters stored at the network level
+        node_number,        int,
+        ideal_flow_history, std::vector<long long>
     >,
-    node_attributes<
+    store_t,            // the contents of the node storage
+    aggregator_t,       // the tags and corresponding aggregators to be logged
+    plot_type<plot_t>,  // the plot description to be used
+    area<0, 0, area_size, area_size>,   // the simulation area
+    init<                   // random node initialization
+        x,          rectangle_d
+    >,
+    node_attributes<        // node initialization from file
         uid,                device_t,
-        x,                  vec<2>,
         edge_capacities,    field<long long>
     >,
-    dimension<dim>, // dimensionality of the space
-    connector<connect::fixed<250, 1, dim>>, // connection allowed within a fixed comm range
-    shape_tag<node_shape>, // the shape of a node is read from this tag in the store
-    size_tag<node_size>,   // the size  of a node is read from this tag in the store
-    color_tag<node_color>,  // the color of a node is read from this tag in the store
-    net_store<node_number, int>
+    dimension<dim>,         // dimensionality of the space
+    shape_tag<node_shape>,  // the shape of a node is read from this tag in the store
+    size_tag<node_size>,    // the size  of a node is read from this tag in the store
+    color_tag<node_color>   // the color of a node is read from this tag in the store
 );
 
 } // namespace option
 
 } // namespace fcpp
 
-int get_height_from_file(std::string file){
-    std::string line;
-    int n_nodes = 0;
-    std::ifstream myfile; 
-    myfile.open(file);
-    if ( myfile.is_open() ) {
-        myfile >> line;
-        n_nodes = stoi(line);
-        myfile.close();
-    }
+//! @brief Reads a single number from a file
+int file_to_number(std::string path){
+    std::ifstream in(path);
+    int n_nodes;
+    in >> n_nodes;
     return n_nodes;
 }
 
@@ -260,19 +270,32 @@ int main(int argc, char *argv[]) {
     using namespace fcpp;
 
     // The name of files containing the network information.
-    const std::string file = "input/" + std::string(argc > 1 ? argv[1] : "test3");
-    // The network object type (interactive simulator with given options).
-    using net_t = component::interactive_graph_simulator<option::list>::net;
-    // The initialisation values (simulation name).
-    auto init_v = common::make_tagged_tuple<option::name, option::nodesinput, option::arcsinput, option::node_number>(
-        "Aggregate Push-Relabel",
-        file + ".nodes",
-        file + ".arcs",
-        get_height_from_file(file + ".height")
-    );
-    // Construct the network object.
-    net_t network{init_v};
-    // Run the simulation until exit.
-    network.run();
+    const std::string file = "input/" + std::string(argc > 1 ? argv[1] : "test14");
+    // The ideal maximum flow.
+    std::vector<long long> flows = {0, 0, 0, 0, 0, 0}; // TODO: actually calculate
+
+    // Set up the plotting object.
+    fcpp::option::plot_t p;
+    std::cout << "/*\n";
+    {
+        // The network object type (interactive simulator with given options).
+        using net_t = component::interactive_graph_simulator<option::list>::net;
+        // The initialisation values (simulation name).
+        auto init_v = common::make_tagged_tuple<option::name, option::plotter, option::nodesinput, option::arcsinput, option::node_number, option::ideal_flow_history>(
+            "Aggregate Push-Relabel",
+            &p,
+            file + ".nodes",
+            file + ".arcs",
+            file_to_number(file + ".size"),
+            flows
+        );
+        // Construct the network object.
+        net_t network{init_v};
+        // Run the simulation until exit.
+        network.run();
+    }
+    // Print plots.
+    std::cout << "*/\n";
+    std::cout << plot::file("aggregate", p.build());
     return 0;
 }
