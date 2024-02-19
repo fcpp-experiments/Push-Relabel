@@ -66,6 +66,16 @@ xcode-select --install
 brew install cmake asymptote doxygen
 ```
 
+## Execution
+
+In order to start the simulation, type the following command:
+```
+./make.sh gui run -O aggregate [- <filename>]
+```
+With the optional parameter `<filename>`, you can specify which graph you want to test.
+After pressing enter, a graphical user interface will appear. At the end of the simulation,
+plots will be produced in `plot/aggregate.pdf`.  
+
 ### Graphical User Interface
 
 Executing a graphical simulation will open a window displaying the simulation scenario, initially still: you can start running the simulation by pressing `P` (current simulated time is displayed in the bottom-left corner). While the simulation is running, network statistics may be periodically printed in the console, and be possibly aggregated in form of an Asymptote plot at simulation end. You can interact with the simulation through the following keys:
@@ -85,5 +95,3 @@ Executing a graphical simulation will open a window displaying the simulation sc
 - any other key will show/hide a legenda displaying this list
 
 Hovering on a node will also display its UID in the top-left corner.
-
-## Simulations

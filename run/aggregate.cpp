@@ -63,27 +63,11 @@ FUN void disperser(ARGS) { CODE
 //! @brief Export types used by the disperser function.
 FUN_EXPORT disperser_t = export_list<neighbour_elastic_force_t, point_elastic_force_t>;
 
-//! @brief Main function.
-MAIN() {
-    // import tag names in the local scope.
-    using namespace tags;
-    using namespace std;
-    disperser(CALL);
-    
-    int node_num = node.net.storage(node_number{});
-    field<long long> capacity = node.storage(edge_capacities{});
-
-    bool is_source = (node.current_time() < 300 and node.uid == 1) or (node.current_time() > 100 and node.uid == 2);
-    bool is_sink = (node.current_time() < 400 and node.uid == node_num) or (node.current_time() > 200 and node.uid == node_num-1);
-
-    // use for testing, change capacity after a certain amount of time
-//    if(node.uid == 4 && node.current_time() > 200){
-//        node.storage(edge_capacities{}) = 10;
-//    }
-
+//! @brief Aggregate Push-Relabel algorithm, calculating excess flow and height of nodes.
+FUN tuple<long long, int> aggregate_push_relabel(ARGS, bool is_source, bool is_sink, field<long long> capacity, int node_num) { CODE
     long long e_flow = 0;
     int height = is_source ? node_num : 0;
-    tuple<field<long long>, int, bool> init(is_source ? capacity : 0, height, is_sink);
+    tuple<field<long long>, int, field<bool>> init(is_source ? capacity : 0, height, is_sink);
     
     nbr(CALL, init, [&](field<tuple<long long, int, bool>> flow_height){
         field<long long> new_flow = 0;
@@ -94,7 +78,7 @@ MAIN() {
         
         e_flow = -sum_hood(CALL, flow, 0);
         
-        flow = mux(flow > node.storage(edge_capacities{}), node.storage(edge_capacities{}), flow);
+        flow = mux(flow > capacity, capacity, flow);
         
         // if a node is giving away more flow than it receives, stop giving excess
         if(!is_source && e_flow < 0){
@@ -152,6 +136,33 @@ MAIN() {
         return make_tuple(flow + new_flow, height, exist_path_to_sink);
     });
     
+    return make_tuple(e_flow, height);
+}
+//! @brief Export types used by the aggregate_push_relabel function.
+FUN_EXPORT aggregate_push_relabel_t = export_list<tuple<field<long long>, int, field<bool>>>;
+
+//! @brief Main function.
+MAIN() {
+    // import tag names in the local scope.
+    using namespace tags;
+    using namespace std;
+    disperser(CALL);
+    
+    int node_num = node.net.storage(node_number{});
+    field<long long> capacity = node.storage(edge_capacities{});
+
+    bool is_source = (node.current_time() < 300 and node.uid == 1) or (node.current_time() > 100 and node.uid == 2);
+    bool is_sink = (node.current_time() < 400 and node.uid == node_num) or (node.current_time() > 200 and node.uid == node_num-1);
+
+    // use for testing, change capacity after a certain amount of time
+//    if(node.uid == 4 && node.current_time() > 200){
+//        capacity = 10;
+//    }
+
+    long long e_flow;
+    int height;
+    tie(e_flow, height) = aggregate_push_relabel(CALL, is_source, is_sink, capacity, node_num);
+
     node.storage(ideal_flow{}) = node.net.storage(ideal_flow_history{})[node.current_time() / 100];
     node.storage(sink_flow{}) = is_sink ? e_flow : 0;
     node.storage(source_flow{}) = is_source ? -e_flow : 0;
@@ -164,8 +175,7 @@ MAIN() {
 }
 
 //! @brief Export types used by the MAIN function.
-FUN_EXPORT main_t = export_list<disperser_t, double, int, bool, tuple<int, int>, field<int>, long long, field<long long>, field<tuple<long long, int, bool>>,
-                                tuple<field<long long>, int, field<bool>>>;
+FUN_EXPORT main_t = export_list<disperser_t, aggregate_push_relabel_t>;
 
 } // namespace coordination
 
@@ -224,13 +234,14 @@ using lines_t = plot::join<plot::value<aggregator::sum<Ts>>...>;
 using plot_t = plot::split<plot::time, lines_t<sink_flow, source_flow, ideal_flow>>;
 
 //! @brief The general simulation options.
+template <bool sync>
 DECLARE_OPTIONS(list,
     parallel<true>,                // multithreading enabled on node rounds
-    synchronised<true>,            // optimise for asynchronous networks
+    synchronised<sync>,            // optimise for asynchronous networks
     program<coordination::main>,   // program to be run (refers to MAIN above)
     exports<coordination::main_t>, // export type list (types used in messages)
     retain<metric::retain<2,1>>,   // messages are kept for 2 seconds before expiring
-    round_schedule<round_s<true>>, // the sequence generator for round events on nodes
+    round_schedule<round_s<sync>>, // the sequence generator for round events on nodes
     log_schedule<log_s>,           // the sequence generator for log events on the network
     net_store<                     // overall parameters stored at the network level
         node_number,        int,
@@ -279,7 +290,7 @@ int main(int argc, char *argv[]) {
     std::cout << "/*\n";
     {
         // The network object type (interactive simulator with given options).
-        using net_t = component::interactive_graph_simulator<option::list>::net;
+        using net_t = component::interactive_graph_simulator<option::list<true>>::net;
         // The initialisation values (simulation name).
         auto init_v = common::make_tagged_tuple<option::name, option::plotter, option::nodesinput, option::arcsinput, option::node_number, option::ideal_flow_history>(
             "Aggregate Push-Relabel",
