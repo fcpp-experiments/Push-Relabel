@@ -68,24 +68,25 @@ FUN_EXPORT disperser_t = export_list<neighbour_elastic_force_t, point_elastic_fo
 //! @brief Aggregate Push-Relabel algorithm, calculating excess flow and height of nodes.
 FUN tuple<long long, int> aggregate_push_relabel(ARGS, bool is_source, bool is_sink, field<long long> capacity, int node_num) { CODE
     long long e_flow = 0;
-    int height = is_source ? node_num : 0;
-    tuple<field<long long>, int, field<bool>> init(is_source ? capacity : 0, height, is_sink);
-    
+    int height = 0;
+    tuple<field<long long>, int, field<bool>> init(0, 0, is_sink);
+
     nbr(CALL, init, [&](field<tuple<long long, int, bool>> flow_height){
         field<long long> new_flow = 0;
         field<long long> flow = -get<0>(flow_height);
         field<int> nbr_height = get<1>(flow_height);
-        
+        field<bool> nbr_sink_path = get<2>(flow_height);
+
         height = get<1>(self(CALL, flow_height));
-        
+        // Invertire queste due?
         e_flow = -sum_hood(CALL, flow, 0);
-        
         flow = mux(flow > capacity, capacity, flow);
-        
+
         // if a node is giving away more flow than it receives, stop giving excess
-        if(!is_source && e_flow < 0){
+        if (not is_source and e_flow < 0) {
+            // variant to try: reduce outgoing edges proportionally
             flow = map_hood([&](long long f){
-                if(f > 0){
+                if (f > 0) {
                     long long r = min(-e_flow, f);
                     f -= r;
                     e_flow -= r;
@@ -93,49 +94,47 @@ FUN tuple<long long, int> aggregate_push_relabel(ARGS, bool is_source, bool is_s
                 return f;
             }, flow);
         }
-        
+
         field<long long> res_capacity = capacity - flow;
-        
-        if(is_source){
-            if(height < node_num){
-                height = node_num;
-            }
+
+        // Anticipare questo if prima del calcolo di e_flow / flow ?
+        if (is_source) {
+            if (height < node_num) height = node_num;
             flow = capacity;
-        }else if(is_sink){
+        } else if (is_sink) {
             height = 0;
             flow = mux(flow > 0, 0ll, flow);
         }
-        
-        tuple<field<int>, field<int>> height_field = make_tuple(nbr_height, nbr_uid(CALL));
-        tuple<int, int> min_height = min_hood(CALL, mux(res_capacity > 0 && get<1>(height_field) != node.uid, height_field, make_tuple(INT_MAX, INT_MAX)));
-        
-        
-        if(get<0>(min_height) >= height && e_flow > 0 && !is_source && !is_sink){
+
+        field<device_t> neighs = nbr_uid(CALL);
+        tuple<int, int> min_height = min_hood(CALL, mux(res_capacity > 0 and neighs != node.uid, make_tuple(nbr_height, neighs), make_tuple(INT_MAX, INT_MAX)));
+
+        if (get<0>(min_height) >= height and e_flow > 0 and not is_source and not is_sink) {
             assert(min_height != make_tuple(INT_MAX, INT_MAX));
             height = get<0>(min_height) + 1; // Relabel
         }
         
-        tuple<field<long long>, field<int>> res_cap_id = make_tuple(res_capacity, nbr_uid(CALL));
-        if(!is_source && !is_sink && e_flow > 0){
-            new_flow = mux(get<1>(min_height) == get<1>(res_cap_id) && height >= get<0>(min_height) + 1, min(get<0>(res_cap_id), e_flow), 0ll);
-        }
+        if (not is_source and not is_sink and e_flow > 0)
+            new_flow = mux(get<1>(min_height) == neighs and height >= get<0>(min_height) + 1, min(res_capacity, e_flow), 0ll);
         
         field<bool> exist_path_to_sink = false;
-        bool reset = max_hood(CALL, mux(res_capacity > 0 && get<2>(flow_height), true, false));
-        
-        if(is_sink){
+        bool reset = any_hood(CALL, res_capacity > 0 and nbr_sink_path);
+        if (is_sink) {
             exist_path_to_sink = true;
-        }else{
-            exist_path_to_sink = mux(!get<2>(flow_height) && reset, true, false);
-            
+        } else {
+            exist_path_to_sink = not nbr_sink_path and reset;
             // if there is a path to sink with residual capacity increment source height
-            if(is_source && reset){
+            if (is_source and reset) {
                 height += node_num;
                 exist_path_to_sink = false;
             }
         }
-        
-        return make_tuple(flow + new_flow, height, exist_path_to_sink);
+
+        // Ricalcolare e_flow su flow + new_flow (check)
+        flow += new_flow;
+        e_flow = -sum_hood(CALL, flow, 0);
+
+        return make_tuple(flow, height, exist_path_to_sink);
     });
     
     return make_tuple(e_flow, height);
