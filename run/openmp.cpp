@@ -17,20 +17,22 @@ void create_test_aggregate(string);
 std::unordered_map<int, node*> node_map;
 std::map<int, std::vector<pair<int, string>>> string_map;
 
+std::map<pair<int, int>, long long> string_map2;
+
 int main() {
 
 	// create_graph_file();
-	// create_test_aggregate("test1");
+	//create_test_aggregate("test21");
 
-	graph g = get_graph("../test_files/test1.txt");
-	auto start = chrono::high_resolution_clock::now();
+	// graph g = get_graph("../test_files/test1.txt");
+	// auto start = chrono::high_resolution_clock::now();
 
-	long long flow = g.get_max_flow(*node_map[1], *node_map[4]);
+	// long long flow = g.get_max_flow(*node_map[1], *node_map[4]);
 
-	auto stop = chrono::high_resolution_clock::now();
-	auto duration = chrono::duration_cast<chrono::microseconds> (stop - start);
+	// auto stop = chrono::high_resolution_clock::now();
+	// auto duration = chrono::duration_cast<chrono::microseconds> (stop - start);
 
-	cout << "max flux: " << flow << " - time: " << duration.count() << "\n";
+	// cout << "max flux: " << flow << " - time: " << duration.count() << "\n";
 
 	tests::start_tests();
 
@@ -114,8 +116,8 @@ void create_test_aggregate(string file_name) {
 	std::ifstream file;
 	std::ofstream nodes, arcs;
 	file.open("..\\test_files\\" + file_name + ".txt");
-	nodes.open("input\\" + file_name + ".nodes");
-	arcs.open("input\\" + file_name  + ".arcs");
+	nodes.open("..\\new_inputs\\" + file_name + ".nodes");
+	arcs.open("..\\new_inputs\\" + file_name  + ".arcs");
 
 	if (file.is_open()) {
 		while (getline(file, line)) {
@@ -125,29 +127,36 @@ void create_test_aggregate(string file_name) {
 			s >> s_u_id >> s_v_id >> s_capacity;
 			int u_id = stoi(s_u_id), v_id = stoi(s_v_id);
 
-			s_arcs += s_u_id + "\t" + s_v_id + "\n";
-			if(string_map.find(stoi(s_v_id)) == string_map.end()){
-				string_map[stoi(s_v_id)];
+			if(string_map2.find({u_id, v_id}) == string_map2.end()){
+				string_map2[{ u_id, v_id }] = stoll(s_capacity);
+				string_map2[{ v_id, -1 }] = 0ll;
+			}else{
+				string_map2[{ u_id, v_id }] += stoll(s_capacity);
 			}
-			string_map[stoi(s_u_id)].push_back({ stoi(s_v_id), s_capacity});
 		}
 	}
+
+	srand(time(NULL));
+	int last_node_u = -1;
+	string capacities = "";
+	for (auto& line : string_map2) {
+		if(get<1>(line.first) != -1){
+			s_arcs += to_string(get<0>(line.first)) + "\t" + to_string(get<1>(line.first)) + "\n";
+		}
+
+		if(get<0>(line.first) != last_node_u){
+			last_node_u = get<0>(line.first);
+			s_nodes += capacities + "" + to_string(last_node_u) + "\t";
+			capacities = "{*: 0}\n";
+		}
+		if(get<1>(line.first) != -1){
+			capacities.insert(capacities.size() - 6, to_string(get<1>(line.first)) + ": " + to_string(line.second) + ", ");
+		}
+	}
+
+	s_nodes += capacities;
 
 	arcs << s_arcs;
-	srand(time(NULL));
-	
-	for (auto& line : string_map) {
-		sort(line.second.begin(), line.second.end());
-		int n1 = rand() % 500, n2 = rand() % 500;
-		string capacities = "{";
-		for (pair<int, string> p : line.second) {
-			capacities += to_string(p.first) + ": " + p.second + ", ";
-		}
-		capacities += "*: 0}\n";
-
-		s_nodes += to_string(line.first) + " \t[" + to_string(n1) + ", " + to_string(n2) + "]\t " + capacities;
-	}
-
 	nodes << s_nodes;
 
 	file.close();
