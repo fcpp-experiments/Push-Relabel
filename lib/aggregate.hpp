@@ -22,6 +22,8 @@ namespace fcpp {
 constexpr size_t dim = 2;
 //! @brief The size of the simulation area.
 constexpr size_t area_size = 500;
+//! @brief Convergence time.
+constexpr size_t time_step = 100;
 
 //! @brief Namespace containing the libraries of coordination routines.
 namespace coordination {
@@ -136,11 +138,7 @@ FUN tuple<long long, int> aggregate_push_relabel(ARGS, bool is_source, bool is_s
                 exist_path_to_sink = false;
             }
         }
-
-        flow += new_flow;
-        e_flow = -sum_hood(CALL, flow, 0);
-
-        return make_tuple(flow, height, exist_path_to_sink);
+        return make_tuple(flow + new_flow, height, exist_path_to_sink);
     });
     
     return make_tuple(e_flow, height);
@@ -158,19 +156,14 @@ struct main {
 
         int node_num = node.net.storage(node_number{});
         field<long long> capacity = node.storage(edge_capacities{});
-        bool is_source = (node.current_time() < 300 and node.uid == 1) or (node.current_time() > 100 and node.uid == 2);
-        bool is_sink = (node.current_time() < 400 and node.uid == node_num) or (node.current_time() > 200 and node.uid == node_num-1);
-
-        // use for testing, change capacity after a certain amount of time
-//        if(node.uid == 4 && node.current_time() > 200){
-//            capacity = 10;
-//        }
+        bool is_source = (node.current_time() < 3*time_step and node.uid == 1) or (node.current_time() > 1*time_step and node.uid == 2);
+        bool is_sink = (node.current_time() < 4*time_step and node.uid == node_num) or (node.current_time() > 2*time_step and node.uid == node_num-1);
 
         long long e_flow;
         int height;
         tie(e_flow, height) = aggregate_push_relabel(CALL, is_source, is_sink, capacity, node_num);
 
-        long long ideal = node.net.storage(ideal_flow_history{})[node.current_time() / 100];
+        long long ideal = node.net.storage(ideal_flow_history{})[node.current_time() / time_step];
         node.storage(ideal_flow{}) = ideal;
         node.storage(sink_flow{}) = is_sink ? e_flow : 0;
         node.storage(source_flow{}) = is_source ? -e_flow : 0;
@@ -200,7 +193,7 @@ using namespace component::tags;
 using namespace coordination::tags;
 
 //! @brief When to end the simulation.
-constexpr size_t end = 500;
+constexpr size_t end = 5*time_step;
 
 //! @brief Description of the round schedule.
 template <bool sync>

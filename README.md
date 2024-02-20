@@ -68,13 +68,18 @@ brew install cmake asymptote doxygen
 
 ## Execution
 
-In order to start the simulation, type the following command:
+In order to start a graphical simulation, type the following command:
 ```
-./make.sh gui run -O aggregate [- <filename>]
+./make.sh gui run -O graphic [- <testnum>]
 ```
-With the optional parameter `<filename>`, you can specify which graph you want to test.
-After pressing enter, a graphical user interface will appear. At the end of the simulation,
-plots will be produced in `plot/aggregate.pdf`.  
+With the optional parameter `<testnum>`, you can specify which graph you want to test by entering its number (from 1 to 19).
+After pressing enter, a graphical user interface will appear. At the end of the simulation, plots will be produced in `plot/graphic.pdf`.
+
+In order to produce all plots without user interaction, type the following command:
+```
+./make.sh run -O batch
+```
+At the end of the simulation, plots will be produced in `plot/batch.pdf`.
 
 ### Graphical User Interface
 
