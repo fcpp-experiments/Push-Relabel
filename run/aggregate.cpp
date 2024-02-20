@@ -12,8 +12,7 @@
 
 //! Importing the FCPP library.
 #include "lib/fcpp.hpp"
-
-#include "../lib/openmp.hpp"
+#include "lib/openmp.hpp"
 
 /**
  * @brief Namespace containing all the objects in the FCPP library.
@@ -62,8 +61,10 @@ namespace tags {
     struct test_id {};
 }
 
+//! @brief Function not moving devices if no graphical simulation.
+FUN void disperser(ARGS, std::false_type) {}
 //! @brief Function for moving devices according to the network topology.
-FUN void disperser(ARGS) { CODE
+FUN void disperser(ARGS, std::true_type) { CODE
     vec<2> v = neighbour_elastic_force(CALL, 0.2*area_size, 0.03) + point_elastic_force(CALL, make_vec(area_size,area_size)/2, 0, 0.005);
     if (isnan(v[0]) or isnan(v[1])) v = make_vec(0,0);
     node.velocity() = v;
@@ -149,38 +150,41 @@ FUN tuple<long long, int> aggregate_push_relabel(ARGS, bool is_source, bool is_s
 FUN_EXPORT aggregate_push_relabel_t = export_list<tuple<field<long long>, int, field<bool>>>;
 
 //! @brief Main function.
-MAIN() {
-    // import tag names in the local scope.
-    using namespace tags;
-    using namespace std;
-    disperser(CALL);
-    
-    int node_num = node.net.storage(node_number{});
-    field<long long> capacity = node.storage(edge_capacities{});
+template <bool graphic>
+struct main {
+    template <typename node_t>
+    void operator()(node_t& node, times_t) {
+        using namespace tags;
+        disperser(CALL, std::integral_constant<bool,graphic>{});
 
-    bool is_source = (node.current_time() < 300 and node.uid == 1) or (node.current_time() > 100 and node.uid == 2);
-    bool is_sink = (node.current_time() < 400 and node.uid == node_num) or (node.current_time() > 200 and node.uid == node_num-1);
+        int node_num = node.net.storage(node_number{});
+        field<long long> capacity = node.storage(edge_capacities{});
+        bool is_source = (node.current_time() < 300 and node.uid == 1) or (node.current_time() > 100 and node.uid == 2);
+        bool is_sink = (node.current_time() < 400 and node.uid == node_num) or (node.current_time() > 200 and node.uid == node_num-1);
 
-    // use for testing, change capacity after a certain amount of time
-//    if(node.uid == 4 && node.current_time() > 200){
-//        capacity = 10;
-//    }
+        // use for testing, change capacity after a certain amount of time
+//        if(node.uid == 4 && node.current_time() > 200){
+//            capacity = 10;
+//        }
 
-    long long e_flow;
-    int height;
-    tie(e_flow, height) = aggregate_push_relabel(CALL, is_source, is_sink, capacity, node_num);
+        long long e_flow;
+        int height;
+        tie(e_flow, height) = aggregate_push_relabel(CALL, is_source, is_sink, capacity, node_num);
 
-    node.storage(ideal_flow{}) = node.net.storage(ideal_flow_history{})[node.current_time() / 100];
-    node.storage(sink_flow{}) = is_sink ? e_flow : 0;
-    node.storage(source_flow{}) = is_source ? -e_flow : 0;
-    node.storage(excess_flow{}) = e_flow;
-    node.storage(node_height{}) = height;
+        long long ideal = node.net.storage(ideal_flow_history{})[node.current_time() / 100];
+        node.storage(ideal_flow{}) = ideal;
+        node.storage(sink_flow{}) = is_sink ? e_flow : 0;
+        node.storage(source_flow{}) = is_source ? -e_flow : 0;
+        node.storage(excess_flow{}) = e_flow;
+        node.storage(node_height{}) = height;
 
-    node.storage(node_size{}) = is_sink or is_source ? 15 : 5 + min(e_flow, 10LL);
-    node.storage(node_color{}) = color::hsva(height * 360 / node_num, 1, 1);
-    node.storage(node_shape{}) = is_sink ? shape::star : is_source ? shape::cube : shape::sphere;
-}
-
+        if (graphic) {
+            node.storage(node_size{}) = is_sink or is_source ? 15 : 5 + min(e_flow * 1.0 / ideal, 1.0) * 20;
+            node.storage(node_color{}) = color::hsva(height * 360 / node_num, 1, 1);
+            node.storage(node_shape{}) = is_sink ? shape::star : is_source ? shape::cube : shape::sphere;
+        }
+    }
+};
 //! @brief Export types used by the MAIN function.
 FUN_EXPORT main_t = export_list<disperser_t, aggregate_push_relabel_t>;
 
@@ -260,16 +264,16 @@ using plot_row = plot::join<absolute_plot, relative_plot>;
 using plot_t = plot::join<plot_row, plot::split<test_id, plot_row>>;
 
 //! @brief The general simulation options.
-template <bool par, bool sync>
+template <bool par, bool sync, bool gui>
 DECLARE_OPTIONS(list,
-    parallel<par>,                 // multithreading enabled on node rounds
-    synchronised<sync>,            // optimise for asynchronous networks
-    program<coordination::main>,   // program to be run (refers to MAIN above)
-    exports<coordination::main_t>, // export type list (types used in messages)
-    retain<metric::retain<2,1>>,   // messages are kept for 2 seconds before expiring
-    round_schedule<round_s<sync>>, // the sequence generator for round events on nodes
-    log_schedule<log_s>,           // the sequence generator for log events on the network
-    net_store<                     // overall parameters stored at the network level
+    parallel<par>,                      // multithreading enabled on node rounds
+    synchronised<sync>,                 // optimise for asynchronous networks
+    program<coordination::main<gui>>,   // program to be run (refers to MAIN above)
+    exports<coordination::main_t>,      // export type list (types used in messages)
+    retain<metric::retain<2,1>>,        // messages are kept for 2 seconds before expiring
+    round_schedule<round_s<sync>>,      // the sequence generator for round events on nodes
+    log_schedule<log_s>,                // the sequence generator for log events on the network
+    net_store<                          // overall parameters stored at the network level
         node_number,        int,
         ideal_flow_history, std::vector<long long>
     >,
@@ -323,7 +327,7 @@ int main(int argc, char *argv[]) {
     std::cout << "/*\n";
     {
         // The network object type (interactive simulator with given options).
-        using net_t = component::interactive_graph_simulator<option::list<true, true>>::net;
+        using net_t = component::interactive_graph_simulator<option::list<true, true, true>>::net;
         // The initialisation values (simulation name).
         auto init_v = common::make_tagged_tuple<option::name, option::plotter, option::nodesinput, option::arcsinput, option::node_number, option::ideal_flow_history, option::test_id>(
             "Aggregate Push-Relabel",
