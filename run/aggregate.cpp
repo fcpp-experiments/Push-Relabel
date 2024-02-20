@@ -106,7 +106,7 @@ FUN tuple<long long, int> aggregate_push_relabel(ARGS, bool is_source, bool is_s
             flow = mux(flow > 0, 0ll, flow);
         }
 
-        field<device_t> neighs = nbr_uid(CALL);
+        field<int> neighs = nbr_uid(CALL);
         tuple<int, int> min_height = min_hood(CALL, mux(res_capacity > 0 and neighs != node.uid, make_tuple(nbr_height, neighs), make_tuple(INT_MAX, INT_MAX)));
 
         if (get<0>(min_height) >= height and e_flow > 0 and not is_source and not is_sink) {
@@ -224,15 +224,15 @@ using store_t = node_store<
 using aggregator_t = aggregators<
     sink_flow,      aggregator::sum<long long>,
     source_flow,    aggregator::sum<long long>,
-    ideal_flow,     aggregator::sum<long long>
+    ideal_flow,     aggregator::max<long long>
 >;
 
 //! @brief Helper template for plotting multiple lines.
 template <typename... Ts>
-using lines_t = plot::join<plot::value<aggregator::sum<Ts>>...>;
+using lines_t = plot::join<plot::value<Ts>...>;
 
 //! @brief Overall plot description.
-using plot_t = plot::split<plot::time, lines_t<sink_flow, source_flow, ideal_flow>>;
+using plot_t = plot::split<plot::time, lines_t<aggregator::sum<sink_flow>, aggregator::sum<source_flow>, aggregator::max<ideal_flow>>>;
 
 //! @brief The general simulation options.
 template <bool sync>

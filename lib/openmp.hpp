@@ -3,7 +3,10 @@
 
 #include <cassert>
 #include <climits>
+
+#if defined(_OPENMP)
 #include <omp.h>
+#endif
 
 #include <iostream>
 #include <fstream>
