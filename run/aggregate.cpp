@@ -85,9 +85,14 @@ FUN tuple<long long, int> aggregate_push_relabel(ARGS, bool is_source, bool is_s
         field<bool> nbr_sink_path = get<2>(flow_height);
 
         height = get<1>(self(CALL, flow_height));
-        // Invertire queste due?
-        e_flow = -sum_hood(CALL, flow, 0);
+
+        if (is_sink) {
+            height = 0;
+            flow = mux(flow > 0, 0ll, flow);
+        }
+
         flow = mux(flow > capacity, capacity, flow);
+        e_flow = -sum_hood(CALL, flow, 0);
 
         // if a node is giving away more flow than it receives, stop giving excess
         if (not is_source and e_flow < 0) {
@@ -104,13 +109,9 @@ FUN tuple<long long, int> aggregate_push_relabel(ARGS, bool is_source, bool is_s
 
         field<long long> res_capacity = capacity - flow;
 
-        // Anticipare questo if prima del calcolo di e_flow / flow ?
         if (is_source) {
             if (height < node_num) height = node_num;
             flow = capacity;
-        } else if (is_sink) {
-            height = 0;
-            flow = mux(flow > 0, 0ll, flow);
         }
 
         field<int> neighs = nbr_uid(CALL);
@@ -137,7 +138,6 @@ FUN tuple<long long, int> aggregate_push_relabel(ARGS, bool is_source, bool is_s
             }
         }
 
-        // Ricalcolare e_flow su flow + new_flow (check)
         flow += new_flow;
         e_flow = -sum_hood(CALL, flow, 0);
 
@@ -314,7 +314,7 @@ int file_to_number(std::string path){
 int main(int argc, char *argv[]) {
     using namespace fcpp;
     // The test to be run
-    int test = argc > 1 ? stoi(argv[1]) : 2;
+    int test = argc > 1 ? stoi(argv[1]) : 7;
     // The name of files containing the network information.
     const std::string file = "input/test" + std::to_string(test);
     // The test network size
