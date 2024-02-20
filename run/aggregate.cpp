@@ -36,9 +36,13 @@ namespace tags {
     //! @brief Shape of the current node.
     struct node_shape {};
 
-    //! @brief Outward flow at the sink
+    //! @brief Outward flow relative error at sinks
+    struct sink_flow__error {};
+    //! @brief Inward flow relative error at sources
+    struct source_flow__error {};
+    //! @brief Outward flow at sinks
     struct sink_flow {};
-    //! @brief Inward flow at the source
+    //! @brief Inward flow at sources
     struct source_flow {};
     //! @brief Ideal exact flow
     struct ideal_flow {};
@@ -54,6 +58,8 @@ namespace tags {
     struct edge_capacities {};
     //! @brief Total number of nodes
     struct node_number {};
+    //! @brief ID of the testcase
+    struct test_id {};
 }
 
 //! @brief Function for moving devices according to the network topology.
@@ -220,24 +226,43 @@ using store_t = node_store<
     excess_flow,                long long,
     node_height,                int
 >;
-//! @brief The tags and corresponding aggregators to be logged (change as needed).
+//! @brief The tags and corresponding aggregators to be logged.
 using aggregator_t = aggregators<
     sink_flow,      aggregator::sum<long long>,
     source_flow,    aggregator::sum<long long>,
-    ideal_flow,     aggregator::max<long long>
+    ideal_flow,     aggregator::max<real_t>
+>;
+
+//! @brief Functor computing the relative error of V with respect to I.
+template <typename V, typename I>
+using functor_error = functor::abs<functor::sub<functor::div<V, I>, distribution::constant_n<int, 1>>>;
+
+//! @brief The tags and functors computing derived properties to be logged.
+using functors_t = log_functors<
+    sink_flow__error,   functor_error<aggregator::sum<sink_flow>, aggregator::max<ideal_flow>>,
+    source_flow__error, functor_error<aggregator::sum<source_flow>, aggregator::max<ideal_flow>>
 >;
 
 //! @brief Helper template for plotting multiple lines.
 template <typename... Ts>
 using lines_t = plot::join<plot::value<Ts>...>;
 
+//! @brief Plot with absolute flow values.
+using absolute_plot = plot::split<plot::time, lines_t<aggregator::sum<sink_flow>, aggregator::sum<source_flow>, aggregator::max<ideal_flow>>>;
+
+//! @brief Plot with absolute flow values.
+using relative_plot = plot::split<plot::time, lines_t<sink_flow__error, source_flow__error>>;
+
 //! @brief Overall plot description.
-using plot_t = plot::split<plot::time, lines_t<aggregator::sum<sink_flow>, aggregator::sum<source_flow>, aggregator::max<ideal_flow>>>;
+using plot_row = plot::join<absolute_plot, relative_plot>;
+
+//! @brief Overall plot description.
+using plot_t = plot::join<plot_row, plot::split<test_id, plot_row>>;
 
 //! @brief The general simulation options.
-template <bool sync>
+template <bool par, bool sync>
 DECLARE_OPTIONS(list,
-    parallel<true>,                // multithreading enabled on node rounds
+    parallel<par>,                 // multithreading enabled on node rounds
     synchronised<sync>,            // optimise for asynchronous networks
     program<coordination::main>,   // program to be run (refers to MAIN above)
     exports<coordination::main_t>, // export type list (types used in messages)
@@ -250,6 +275,7 @@ DECLARE_OPTIONS(list,
     >,
     store_t,            // the contents of the node storage
     aggregator_t,       // the tags and corresponding aggregators to be logged
+    functors_t,         // description of derived quantities to be logged
     plot_type<plot_t>,  // the plot description to be used
     area<0, 0, area_size, area_size>,   // the simulation area
     init<                   // random node initialization
@@ -258,6 +284,9 @@ DECLARE_OPTIONS(list,
     node_attributes<        // node initialization from file
         uid,                device_t,
         edge_capacities,    field<long long>
+    >,
+    extra_info<             // additional information for plotting
+        test_id,    int
     >,
     dimension<dim>,         // dimensionality of the space
     shape_tag<node_shape>,  // the shape of a node is read from this tag in the store
@@ -280,27 +309,30 @@ int file_to_number(std::string path){
 //! @brief The main function.
 int main(int argc, char *argv[]) {
     using namespace fcpp;
-    // The default name of the files containing the network information
-    const std::string default_file = "test2";
+    // The test to be run
+    int test = argc > 1 ? stoi(argv[1]) : 2;
     // The name of files containing the network information.
-    const std::string file = "input/" + std::string(argc > 1 ? argv[1] : default_file);
+    const std::string file = "input/test" + std::to_string(test);
+    // The test network size
+    const int size = file_to_number(file + ".size");
     // The ideal maximum flow.
-    std::vector<long long> flows = tests::get_flows("../test_files/" + std::string(argc > 1 ? argv[1] : default_file) + ".txt", file_to_number(file + ".size"));
+    std::vector<long long> flows = tests::get_flows("../test_files/test" + std::to_string(test) + ".txt", size);
 
     // Set up the plotting object.
     fcpp::option::plot_t p;
     std::cout << "/*\n";
     {
         // The network object type (interactive simulator with given options).
-        using net_t = component::interactive_graph_simulator<option::list<true>>::net;
+        using net_t = component::interactive_graph_simulator<option::list<true, true>>::net;
         // The initialisation values (simulation name).
-        auto init_v = common::make_tagged_tuple<option::name, option::plotter, option::nodesinput, option::arcsinput, option::node_number, option::ideal_flow_history>(
+        auto init_v = common::make_tagged_tuple<option::name, option::plotter, option::nodesinput, option::arcsinput, option::node_number, option::ideal_flow_history, option::test_id>(
             "Aggregate Push-Relabel",
             &p,
             file + ".nodes",
             file + ".arcs",
-            file_to_number(file + ".size"),
-            flows
+            size,
+            flows,
+            test
         );
         // Construct the network object.
         net_t network{init_v};
