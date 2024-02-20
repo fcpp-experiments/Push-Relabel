@@ -277,7 +277,7 @@ namespace tests {
 
 		node_map.clear();
 		g = get_graph_from_file(file_name, node_map);
-		int last_test = get_flow_multiple(g, vector<int>{2}, vector<int>{n_nodes - 1}, node_map);
+		long long last_test = get_flow_multiple(g, vector<int>{2}, vector<int>{n_nodes - 1}, node_map);
 		results.push_back(last_test);
 		results.push_back(last_test);
 
