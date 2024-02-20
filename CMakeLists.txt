@@ -16,4 +16,5 @@ project(
 
 # target declaration
 fcpp_target(./run/openmp.cpp OFF)
-fcpp_target(./run/aggregate.cpp ON)
+fcpp_target(./run/graphic.cpp ON)
+fcpp_target(./run/batch.cpp OFF)
