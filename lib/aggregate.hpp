@@ -77,13 +77,14 @@ FUN_EXPORT disperser_t = export_list<neighbour_elastic_force_t, point_elastic_fo
 FUN tuple<long long, int> aggregate_push_relabel(ARGS, bool is_source, bool is_sink, field<long long> capacity, int node_num) { CODE
     long long e_flow = 0;
     int height = 0;
-    tuple<field<long long>, int, field<bool>> init(0, 0, is_sink);
+    tuple<field<long long>, int, int> init(0, 0, is_sink ? 0 : INT_MAX);
 
-    nbr(CALL, init, [&](field<tuple<long long, int, bool>> flow_height){
+    nbr(CALL, init, [&](field<tuple<long long, int, int>> flow_height){
         field<long long> new_flow = 0;
+
         field<long long> flow = -get<0>(flow_height);
         field<int> nbr_height = get<1>(flow_height);
-        field<bool> nbr_sink_path = get<2>(flow_height);
+        field<int> nbr_sink_path = get<2>(flow_height);
 
         height = get<1>(self(CALL, flow_height));
 
@@ -112,7 +113,6 @@ FUN tuple<long long, int> aggregate_push_relabel(ARGS, bool is_source, bool is_s
 
         if (is_source) {
             if (height < node_num) height = node_num;
-            flow = capacity;
         }
 
         field<int> neighs = nbr_uid(CALL);
@@ -125,26 +125,30 @@ FUN tuple<long long, int> aggregate_push_relabel(ARGS, bool is_source, bool is_s
         
         if (not is_source and not is_sink and e_flow > 0)
             new_flow = mux(get<1>(min_height) == neighs and height >= get<0>(min_height) + 1, min(res_capacity, e_flow), 0ll);
-        
-        field<bool> exist_path_to_sink = false;
-        bool reset = any_hood(CALL, res_capacity > 0 and nbr_sink_path);
+
+
+        int length_to_sink = self(CALL, nbr_sink_path);
+        int min_length_with_residual = min_hood(CALL, mux(res_capacity > 0 and nbr_sink_path < length_to_sink, nbr_sink_path, INT_MAX));
+
+        length_to_sink = min_length_with_residual < INT_MAX ? min_length_with_residual + 1 : INT_MAX;
+
         if (is_sink) {
-            exist_path_to_sink = true;
+            length_to_sink = 0;
         } else {
-            exist_path_to_sink = not nbr_sink_path and reset;
             // if there is a path to sink with residual capacity increment source height
-            if (is_source and reset) {
+            if (is_source and length_to_sink != INT_MAX) {
+                flow = capacity;
                 height += node_num;
-                exist_path_to_sink = false;
+                length_to_sink = INT_MAX;
             }
         }
-        return make_tuple(flow + new_flow, height, exist_path_to_sink);
+        return make_tuple(flow + new_flow, height, length_to_sink);
     });
     
     return make_tuple(e_flow, height);
 }
 //! @brief Export types used by the aggregate_push_relabel function.
-FUN_EXPORT aggregate_push_relabel_t = export_list<tuple<field<long long>, int, field<bool>>>;
+FUN_EXPORT aggregate_push_relabel_t = export_list<tuple<field<long long>, int, int>>;
 
 //! @brief Main function.
 template <bool graphic>
@@ -158,7 +162,8 @@ struct main {
         field<long long> capacity = node.storage(edge_capacities{});
         bool is_source = (node.current_time() < 3*time_step and node.uid == 1) or (node.current_time() > 1*time_step and node.uid == 2);
         bool is_sink = (node.current_time() < 4*time_step and node.uid == node_num) or (node.current_time() > 2*time_step and node.uid == node_num-1);
-
+        // bool is_sink = node.uid == node_num - 1;
+        // bool is_source = node.uid == 2;
         long long e_flow;
         int height;
         tie(e_flow, height) = aggregate_push_relabel(CALL, is_source, is_sink, capacity, node_num);
