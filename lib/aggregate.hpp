@@ -23,7 +23,7 @@ constexpr size_t dim = 2;
 //! @brief The size of the simulation area.
 constexpr size_t area_size = 500;
 //! @brief Convergence time.
-constexpr size_t time_step = 100;
+constexpr size_t time_step = 500;
 
 //! @brief Namespace containing the libraries of coordination routines.
 namespace coordination {
@@ -189,6 +189,12 @@ FUN_EXPORT main_t = export_list<disperser_t, aggregate_push_relabel_t>;
 
 // [SYSTEM SETUP]
 
+namespace functor {
+    //! @brief Functor computing the relative error of V with respect to I, from 0% to 100%.
+    template <typename V, typename I>
+    using error = div<abs<sub<I,V>>, max<max<I, distribution::constant_n<int,1>>,V>>;
+}
+
 //! @brief Namespace for component options.
 namespace option {
 
@@ -234,14 +240,9 @@ using aggregator_t = aggregators<
     ideal_flow,     aggregator::max<real_t>
 >;
 
-//! @brief Functor computing the relative error of V with respect to I.
-template <typename V, typename I>
-using functor_error = functor::abs<functor::sub<functor::div<V, I>, distribution::constant_n<int, 1>>>;
-
 //! @brief The tags and functors computing derived properties to be logged.
 using functors_t = log_functors<
-    sink_flow__error,   functor_error<aggregator::sum<sink_flow>, aggregator::max<ideal_flow>>,
-    source_flow__error, functor_error<aggregator::sum<source_flow>, aggregator::max<ideal_flow>>
+    sink_flow__error,   functor::error<aggregator::sum<sink_flow>, aggregator::max<ideal_flow>>
 >;
 
 //! @brief Helper template for plotting multiple lines.
@@ -249,10 +250,10 @@ template <typename... Ts>
 using lines_t = plot::join<plot::value<Ts>...>;
 
 //! @brief Plot with absolute flow values.
-using absolute_plot = plot::split<plot::time, lines_t<aggregator::sum<sink_flow>, aggregator::sum<source_flow>, aggregator::max<ideal_flow>>>;
+using absolute_plot = plot::split<plot::time, lines_t<aggregator::sum<sink_flow>, aggregator::max<ideal_flow>>>;
 
 //! @brief Plot with absolute flow values.
-using relative_plot = plot::split<plot::time, lines_t<sink_flow__error, source_flow__error>>;
+using relative_plot = plot::split<plot::time, lines_t<sink_flow__error>>;
 
 //! @brief Overall plot description.
 using plot_row = plot::join<absolute_plot, relative_plot>;
