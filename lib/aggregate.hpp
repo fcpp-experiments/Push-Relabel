@@ -23,7 +23,7 @@ constexpr size_t dim = 2;
 //! @brief The size of the simulation area.
 constexpr size_t area_size = 500;
 //! @brief Convergence time.
-constexpr size_t time_step = 100;
+constexpr size_t time_step = 200;
 
 //! @brief Namespace containing the libraries of coordination routines.
 namespace coordination {
@@ -77,14 +77,13 @@ FUN_EXPORT disperser_t = export_list<neighbour_elastic_force_t, point_elastic_fo
 FUN tuple<long long, int> aggregate_push_relabel(ARGS, bool is_source, bool is_sink, field<long long> capacity, int node_num) { CODE
     long long e_flow = 0;
     int height = 0;
-    tuple<field<long long>, int, int> init(0, 0, 0);
+    tuple<field<long long>, int> init(0, 0);
 
-    nbr(CALL, init, [&](field<tuple<long long, int, int>> flow_height){
+    nbr(CALL, init, [&](field<tuple<long long, int>> flow_height){
         field<long long> new_flow = 0;
 
         field<long long> flow = -get<0>(flow_height);
         field<int> nbr_height = get<1>(flow_height);
-        field<int> nbr_sink_path = get<2>(flow_height);
         height = get<1>(self(CALL, flow_height));
 
         if (is_sink) {
@@ -92,7 +91,7 @@ FUN tuple<long long, int> aggregate_push_relabel(ARGS, bool is_source, bool is_s
             flow = mux(flow > 0, 0ll, flow);
         }
         if (is_source) {
-            if (height < node_num) height = node_num;
+            height = node_num;
             flow = mux(nbr_height < height, capacity, mux(flow < 0, 0ll, flow));
         }
 
@@ -123,20 +122,16 @@ FUN tuple<long long, int> aggregate_push_relabel(ARGS, bool is_source, bool is_s
         
         if (not is_source and not is_sink and e_flow > 0)
             new_flow = mux(get<1>(min_height) == neighs and height >= get<0>(min_height) + 1, min(res_capacity, e_flow), 0ll);
+        
+        height = min_hood(CALL, mux(res_capacity > 0 and nbr_height + 1 < height, nbr_height, height));
 
-        // if there is a path to sink with residual capacity increment source height
-        int length_to_sink = min_hood(CALL, mux(res_capacity > 0 and nbr_sink_path < node_num, nbr_sink_path + 1, INT_MAX), is_sink ? 0 : INT_MAX);
-        if (is_source and length_to_sink != INT_MAX) {
-            height += 2*node_num;
-            flow = mux(nbr_height < height, capacity, mux(flow < 0, 0ll, flow));
-        }
-        return make_tuple(flow + new_flow, height, length_to_sink);
+        return make_tuple(flow + new_flow, height);
     });
     
     return make_tuple(e_flow, height);
 }
 //! @brief Export types used by the aggregate_push_relabel function.
-FUN_EXPORT aggregate_push_relabel_t = export_list<tuple<field<long long>, int, int>>;
+FUN_EXPORT aggregate_push_relabel_t = export_list<tuple<field<long long>, int>>;
 
 //! @brief Main function.
 template <bool graphic>
@@ -150,8 +145,8 @@ struct main {
         field<long long> capacity = node.storage(edge_capacities{});
         bool is_source = (node.current_time() < 3*time_step and node.uid == 1) or (node.current_time() > 1*time_step and node.uid == 2);
         bool is_sink = (node.current_time() < 4*time_step and node.uid == node_num) or (node.current_time() > 2*time_step and node.uid == node_num-1);
-        // bool is_sink = node.uid == node_num - 1;
-        // bool is_source = node.uid == 2;
+        // bool is_sink = node.uid == node_num;
+        // bool is_source = node.uid == 1;
         long long e_flow;
         int height;
         tie(e_flow, height) = aggregate_push_relabel(CALL, is_source, is_sink, capacity, node_num);
