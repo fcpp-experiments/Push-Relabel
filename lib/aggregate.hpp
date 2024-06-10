@@ -77,61 +77,88 @@ FUN_EXPORT disperser_t = export_list<neighbour_elastic_force_t, point_elastic_fo
 FUN tuple<long long, int> aggregate_push_relabel(ARGS, bool is_source, bool is_sink, field<long long> capacity, int node_num) { CODE
     long long e_flow = 0;
     int height = 0;
-    tuple<field<long long>, int> init(0, 0);
-
-    nbr(CALL, init, [&](field<tuple<long long, int>> flow_height){
+    tuple<field<long long>, int, int> init(0, 0, 0);
+    
+    nbr(CALL, init, [&](field<tuple<long long, int, int>> flow_height){
         field<long long> new_flow = 0;
 
         field<long long> flow = -get<0>(flow_height);
         field<int> nbr_height = get<1>(flow_height);
+        field<int> nbr_priority = get<2>(flow_height);
+
         height = get<1>(self(CALL, flow_height));
+        field<bool> neigh_is_source = nbr(CALL, is_source);
 
-        if (is_sink) {
-            height = 0;
-            flow = mux(flow > 0, 0ll, flow);
-        }
-        if (is_source) {
-            height = node_num;
-            flow = mux(nbr_height < height, capacity, mux(flow < 0, 0ll, flow));
-        }
-
-        flow = mux(flow > capacity, capacity, flow);
-        e_flow = -sum_hood(CALL, flow, 0);
-
-        // if a node is giving away more flow than it receives, stop giving excess (variant to try: reduce outgoing edges proportionally)
-        if (not is_source and e_flow < 0) {
-            flow = map_hood([&](long long f){
-                if (f > 0) {
-                    long long r = min(-e_flow, f);
-                    f -= r;
-                    e_flow -= r;
+        flow = old(CALL, flow, [&](field<long long> old_flow){
+            
+            field<tuple<long long, int>> temp = map_hood([&](long long f, long long of, int priority, bool n_source, int h){
+                if(f == of or n_source or (f != of and (height + 1 == h or priority == 1))){
+                    priority = 0;
+                    return make_tuple(f, priority);
+                }else { // a != t and priority == 0
+                    priority = 1;
+                    return make_tuple(of, priority);
                 }
-                return f;
-            }, flow);
-        }
+            }, flow, old_flow, nbr_priority, neigh_is_source, nbr_height);
 
-        field<long long> res_capacity = capacity - flow;
+            flow = get<0>(temp);
+            nbr_priority = get<1>(temp);
 
-        field<int> neighs = nbr_uid(CALL);
-        tuple<int, int> min_height = min_hood(CALL, mux(res_capacity > 0 and neighs != node.uid, make_tuple(nbr_height, neighs), make_tuple(INT_MAX, INT_MAX)));
+            if (is_sink) {
+                height = 0;
+                nbr_priority = 1;
+                flow = mux(flow > 0, 0ll, flow);
+            }
+            if (is_source) {
+                height = node_num;
+                //nbr_priority = 1;
+                flow = mux(nbr_height < height, capacity, mux(flow < 0, 0ll, flow));
+            }
 
-        if (get<0>(min_height) >= height and e_flow > 0 and not is_source and not is_sink) {
-            assert(min_height != make_tuple(INT_MAX, INT_MAX));
-            height = get<0>(min_height) + 1; // Relabel
-        }
-        
-        if (not is_source and not is_sink and e_flow > 0)
-            new_flow = mux(get<1>(min_height) == neighs and height >= get<0>(min_height) + 1, min(res_capacity, e_flow), 0ll);
-        
-        height = min_hood(CALL, mux(res_capacity > 0 and nbr_height + 1 < height, nbr_height, height));
+            flow = mux(flow > capacity, capacity, flow);
+            e_flow = -sum_hood(CALL, flow, 0);
 
-        return make_tuple(flow + new_flow, height);
+            // if a node is giving away more flow than it receives, stop giving excess (variant to try: reduce outgoing edges proportionally)
+            if (not is_source and e_flow < 0) {
+                field<tuple<long long, int>> map_result;
+                map_result = map_hood([&](long long f, int priority){
+                    priority = 0;
+                    if (f > 0) {
+                        long long r = min(-e_flow, f);
+                        f -= r; 
+                        e_flow -= r;
+                        priority = 1;
+                    }
+                    return make_tuple(f, priority);
+                }, flow, nbr_priority);
+
+                flow = get<0>(map_result);
+                nbr_priority = get<1>(map_result);
+            }
+            
+            field<long long> res_capacity = capacity - flow;
+
+            field<int> neighs = nbr_uid(CALL);
+            tuple<int, int> min_height = min_hood(CALL, mux(res_capacity > 0 and neighs != node.uid, make_tuple(nbr_height, neighs), make_tuple(INT_MAX, INT_MAX)));
+
+            if (get<0>(min_height) >= height and e_flow > 0 and not is_source and not is_sink) {
+                assert(min_height != make_tuple(INT_MAX, INT_MAX));
+                height = get<0>(min_height) + 1; // Relabel
+            }
+            
+            if (not is_source and not is_sink and e_flow > 0)
+                new_flow = mux(get<1>(min_height) == neighs and height >= get<0>(min_height) + 1, min(res_capacity, e_flow), 0ll);
+
+            height = min_hood(CALL, mux(res_capacity > 0 and nbr_height + 1 < height, nbr_height, height));
+            return flow + new_flow;
+        });
+        return make_tuple(flow, height, nbr_priority);
     });
     
     return make_tuple(e_flow, height);
 }
 //! @brief Export types used by the aggregate_push_relabel function.
-FUN_EXPORT aggregate_push_relabel_t = export_list<tuple<field<long long>, int>>;
+FUN_EXPORT aggregate_push_relabel_t = export_list<tuple<field<long long>, int, field<int>>, field<long long>, bool, int, field<int>>;
 
 //! @brief Main function.
 template <bool graphic>
