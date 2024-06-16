@@ -88,18 +88,26 @@ FUN tuple<long long, int> aggregate_push_relabel(ARGS, bool is_source, bool is_s
 
         height = get<1>(self(CALL, flow_height));
         field<bool> neigh_is_source = nbr(CALL, is_source);
+        
+        tuple<field<long long>, field<int>> o_flow(flow, nbr_priority);
 
-        flow = old(CALL, flow, [&](field<long long> old_flow){
-            
-            field<tuple<long long, int>> temp = map_hood([&](long long f, long long of, int priority, bool n_source, int h){
-                if(f == of or n_source or (f != of and (height + 1 == h or priority == 1))){
-                    priority = 0;
-                    return make_tuple(f, priority);
-                }else { // a != t and priority == 0
-                    priority = 1;
-                    return make_tuple(of, priority);
+        o_flow = old(CALL, o_flow, [&](field<tuple<long long, int>> old_values){
+            field<long long> old_flow = get<0>(old_values);
+            field<int> old_priority = get<1>(old_values);
+
+            field<tuple<long long, int>> temp = map_hood([&](long long f, long long of, int priority, int h, int op, int uids){
+                if(priority == 1 and op == 1 and f != of){
+                    if(node.uid < uids){
+                        return make_tuple(of, 1);
+                    }
+                    return make_tuple(f, 1);
                 }
-            }, flow, old_flow, nbr_priority, neigh_is_source, nbr_height);
+                if(f == of or (f != of and (height + 1 == h or priority == 1))){
+                    return make_tuple(f, 0);
+                }else { // a != t and priority == 0
+                    return make_tuple(of, 1);
+                }
+            }, flow, old_flow, nbr_priority, nbr_height, old_priority, nbr_uid(CALL));
 
             flow = get<0>(temp);
             nbr_priority = get<1>(temp);
@@ -111,7 +119,7 @@ FUN tuple<long long, int> aggregate_push_relabel(ARGS, bool is_source, bool is_s
             }
             if (is_source) {
                 height = node_num;
-                //nbr_priority = 1;
+                nbr_priority = 1;
                 flow = mux(nbr_height < height, capacity, mux(flow < 0, 0ll, flow));
             }
 
@@ -125,7 +133,7 @@ FUN tuple<long long, int> aggregate_push_relabel(ARGS, bool is_source, bool is_s
                     priority = 0;
                     if (f > 0) {
                         long long r = min(-e_flow, f);
-                        f -= r; 
+                        f -= r;
                         e_flow -= r;
                         priority = 1;
                     }
@@ -148,17 +156,19 @@ FUN tuple<long long, int> aggregate_push_relabel(ARGS, bool is_source, bool is_s
             
             if (not is_source and not is_sink and e_flow > 0)
                 new_flow = mux(get<1>(min_height) == neighs and height >= get<0>(min_height) + 1, min(res_capacity, e_flow), 0ll);
+                nbr_priority = mux(new_flow > 0, 0, nbr_priority);
 
             height = min_hood(CALL, mux(res_capacity > 0 and nbr_height + 1 < height, nbr_height, height));
-            return flow + new_flow;
+            return make_tuple(flow + new_flow, nbr_priority);
         });
+        flow = get<0>(o_flow);
         return make_tuple(flow, height, nbr_priority);
     });
     
     return make_tuple(e_flow, height);
 }
 //! @brief Export types used by the aggregate_push_relabel function.
-FUN_EXPORT aggregate_push_relabel_t = export_list<tuple<field<long long>, int, field<int>>, field<long long>, bool, int, field<int>>;
+FUN_EXPORT aggregate_push_relabel_t = export_list<tuple<field<long long>, int, field<int>>, field<long long>, bool, int, field<int>, tuple<field<long long>, field<int>>>;
 
 //! @brief Main function.
 template <bool graphic>
@@ -172,7 +182,7 @@ struct main {
         field<long long> capacity = node.storage(edge_capacities{});
         bool is_source = (node.current_time() < 3*time_step and node.uid == 1) or (node.current_time() > 1*time_step and node.uid == 2);
         bool is_sink = (node.current_time() < 4*time_step and node.uid == node_num) or (node.current_time() > 2*time_step and node.uid == node_num-1);
-        // bool is_sink = node.uid == node_num;
+        // bool is_sink = node.uid == node_num /*|| (node.uid == 2 && node.current_time() > 200)*/;
         // bool is_source = node.uid == 1;
         long long e_flow;
         int height;
