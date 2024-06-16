@@ -15,14 +15,20 @@ int main(int argc, char *argv[]) {
 
     // Set up the plotting object.
     fcpp::option::plot_t p;
-    for (int test=1; test<20; ++test) {
+    for (int test=1; test<=22; ++test) {
+        string file_number = std::to_string(test);
+        // string file_number = "14";
+
+        if(test == 16){
+            continue;
+        }
         std::cerr << "test " << test << "..." << std::flush;
         // The name of files containing the network information.
-        const std::string file = "input/test" + std::to_string(test);
+        const std::string file = "input/test" + file_number;
         // The test network size
         const int size = file_to_number(file + ".size");
         // The ideal maximum flow.
-        std::vector<long long> flows = tests::get_flows("input/test" + std::to_string(test) + ".txt", size);
+        std::vector<long long> flows = tests::get_flows("input/test" + file_number + ".txt", size);
         // The network object type (interactive simulator with given options).
         using net_t = component::batch_graph_simulator<option::list<true, true, false>>::net;
         // The initialisation values (simulation name).
