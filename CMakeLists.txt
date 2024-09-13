@@ -18,3 +18,4 @@ project(
 fcpp_target(./run/openmp.cpp OFF)
 fcpp_target(./run/graphic.cpp ON)
 fcpp_target(./run/batch.cpp OFF)
+fcpp_target(./run/test.cpp ON)
