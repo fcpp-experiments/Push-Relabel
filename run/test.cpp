@@ -72,16 +72,17 @@ FUN tuple<double, int> aggregate_push_relabel(ARGS, bool is_source, bool is_sink
             field<int> old_priority = get<1>(old_values);
 
             field<tuple<double, int>> temp = map_hood([&](double f, double of, int priority, int h, int op, int uids){
-                if(priority == 1 and op == 1 and f != of){
+                if(priority == op and op == 2 and f != of){
                     if(node.uid < uids){
-                        return make_tuple(of, 1);
+                        return make_tuple(of, 2);
                     }
-                    return make_tuple(f, 1);
+                    return make_tuple(f, 2);
                 }
-                if(f == of or (f != of and (height + 1 == h or priority == 1))){
+
+                if(f != of and height + 1 != h and priority == 1){
+                    return make_tuple(of, 2);
+                } else{
                     return make_tuple(f, 0);
-                }else { // a != t and priority == 0
-                    return make_tuple(of, 1);
                 }
             }, flow, old_flow, nbr_priority, nbr_height, old_priority, nbr_uid(CALL));
 
@@ -90,12 +91,12 @@ FUN tuple<double, int> aggregate_push_relabel(ARGS, bool is_source, bool is_sink
 
             if (is_sink) {
                 height = 0;
-                nbr_priority = 1;
+                nbr_priority = 2;
                 flow = mux(flow > 0, .0, flow);
             }
             if (is_source) {
                 height = node_num;
-                nbr_priority = 1;
+                nbr_priority = 2;
                 flow = mux(nbr_height < height, capacity, mux(flow < 0, .0, flow));
             }
 
@@ -111,7 +112,7 @@ FUN tuple<double, int> aggregate_push_relabel(ARGS, bool is_source, bool is_sink
                         double r = min(-e_flow, f);
                         f -= r;
                         e_flow -= r;
-                        priority = 1;
+                        priority = 2;
                     }
                     return make_tuple(f, priority);
                 }, flow, nbr_priority);
@@ -130,9 +131,10 @@ FUN tuple<double, int> aggregate_push_relabel(ARGS, bool is_source, bool is_sink
                 height = get<0>(min_height) + 1; // Relabel
             }
             
-            if (not is_source and not is_sink and e_flow > 0)
+            if (not is_source and not is_sink and e_flow > 0){
                 new_flow = mux(get<1>(min_height) == neighs and height >= get<0>(min_height) + 1, min(res_capacity, e_flow), (double)0);
-                nbr_priority = mux(new_flow > 0, 0, nbr_priority);
+                nbr_priority = mux(new_flow > 0, 1, nbr_priority);
+            }
 
             height = min_hood(CALL, mux(res_capacity > 0 and nbr_height + 1 < height, nbr_height, height));
             return make_tuple(flow + new_flow, nbr_priority);
@@ -318,7 +320,7 @@ DECLARE_OPTIONS(list,
 //! @brief The main function.
 int main() {
     using namespace fcpp;
-
+    
     fcpp::option::plot_t p;
     //! @brief The network object type (interactive simulator with given options).
     using net_t = component::interactive_simulator<option::list>::net;
