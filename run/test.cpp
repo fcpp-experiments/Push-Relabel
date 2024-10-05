@@ -91,12 +91,10 @@ FUN tuple<double, int> aggregate_push_relabel(ARGS, bool is_source, bool is_sink
 
             if (is_sink) {
                 height = 0;
-                nbr_priority = 2;
                 flow = mux(flow > 0, .0, flow);
             }
             if (is_source) {
                 height = node_num;
-                nbr_priority = 2;
                 flow = mux(nbr_height < height, capacity, mux(flow < 0, .0, flow));
             }
 
@@ -105,20 +103,14 @@ FUN tuple<double, int> aggregate_push_relabel(ARGS, bool is_source, bool is_sink
 
             // if a node is giving away more flow than it receives, stop giving excess (variant to try: reduce outgoing edges proportionally)
             if (not is_source and e_flow < 0) {
-                field<tuple<double, int>> map_result;
-                map_result = map_hood([&](double f, int priority){
-                    priority = 0;
+                flow = map_hood([&](double f, int priority){
                     if (f > 0) {
-                        double r = min(-e_flow, f);
+                        long long r = min(-e_flow, f);
                         f -= r;
                         e_flow -= r;
-                        priority = 2;
                     }
-                    return make_tuple(f, priority);
+                    return f;
                 }, flow, nbr_priority);
-
-                flow = get<0>(map_result);
-                nbr_priority = get<1>(map_result);
             }
             
             field<double> res_capacity = capacity - flow;
@@ -184,11 +176,6 @@ MAIN() {
     bool is_sink = node.uid == node_number - 1;
 
     tuple<double, int> result = aggregate_push_relabel(CALL, is_source, is_sink, capacity, node_number);
-    if(is_sink){
-        //std::cout << "Result: " << get<0>(result) << "\n";
-    }
-
-
 
 	// usage of node storage
     node.storage(node_size{}) = 10;

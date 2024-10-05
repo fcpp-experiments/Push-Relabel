@@ -115,12 +115,10 @@ FUN tuple<long long, int> aggregate_push_relabel(ARGS, bool is_source, bool is_s
 
             if (is_sink) {
                 height = 0;
-                nbr_priority = 2;
                 flow = mux(flow > 0, 0ll, flow);
             }
             if (is_source) {
                 height = node_num;
-                nbr_priority = 2;
                 flow = mux(nbr_height < height, capacity, mux(flow < 0, 0ll, flow));
             }
 
@@ -129,20 +127,14 @@ FUN tuple<long long, int> aggregate_push_relabel(ARGS, bool is_source, bool is_s
 
             // if a node is giving away more flow than it receives, stop giving excess (variant to try: reduce outgoing edges proportionally)
             if (not is_source and e_flow < 0) {
-                field<tuple<long long, int>> map_result;
-                map_result = map_hood([&](long long f, int priority){
-                    priority = 0;
+                flow = map_hood([&](long long f, int priority){
                     if (f > 0) {
                         long long r = min(-e_flow, f);
                         f -= r;
                         e_flow -= r;
-                        priority = 2;
                     }
-                    return make_tuple(f, priority);
+                    return f;
                 }, flow, nbr_priority);
-
-                flow = get<0>(map_result);
-                nbr_priority = get<1>(map_result);
             }
             
             field<long long> res_capacity = capacity - flow;
