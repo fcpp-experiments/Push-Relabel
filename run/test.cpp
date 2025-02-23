@@ -298,8 +298,10 @@ DECLARE_OPTIONS(list,
     >,
     dimension<dim>, // dimensionality of the space
     area<0, 0, 500, 500>,
+    connector<connect::fixed<radius, 1, dim>>, // connection allowed within a fixed comm range
+    /*
     connector<connect::radial<fail_probability, connect::fixed<radius, 1, dim>>>, // connection allowed within a fixed comm range
-    
+    */    
     shape_tag<node_shape>, // the shape of a node is read from this tag in the store
     size_tag<node_size>,   // the size  of a node is read from this tag in the store
     color_tag<node_color>  // the color of a node is read from this tag in the store
@@ -317,7 +319,7 @@ int main() {
     //! @brief The network object type (interactive simulator with given options).
     using net_t = component::interactive_simulator<option::list>::net;
     //! @brief The initialisation values (simulation name).
-    auto init_v = common::make_tagged_tuple<option::name, option::plotter, option::test_id>("Exercises", &p, 1);
+    auto init_v = common::make_tagged_tuple<option::name, option::plotter, option::test_id, option::seed>("Exercises", &p, 1, 42);
     //! @brief Construct the network object.
     net_t network{init_v};
     //! @brief Run the simulation until exit.
