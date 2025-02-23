@@ -24,6 +24,8 @@ bool operator<(vec<n> const&, vec<n> const&) {
 }
 
 constexpr int fail_probability = 90;
+//! @brief Number of people in the area.
+constexpr int node_num = 3;
 
 //! @brief Namespace containing the libraries of coordination routines.
 namespace coordination {
@@ -47,7 +49,9 @@ namespace tags {
     struct source_flow {};
     struct test_id {};
 }
+}
 
+namespace coordination {
 //! @brief The maximum communication range between nodes.
 constexpr size_t communication_range = 1;
 
@@ -150,7 +154,6 @@ double get_capacity(double distance){
 MAIN() {
     // import tag names in the local scope.
     using namespace tags;
-	int node_number = 10;
 	int uid = node.uid;
 
     //    field<double> capacity = node.nbr_dist();
@@ -175,10 +178,10 @@ MAIN() {
 
     rectangle_walk(CALL, rec1, rec2, .2, 1);
 
-    bool is_source = node.uid == 1;
-    bool is_sink = node.uid == node_number - 1;
+    bool is_source = node.uid == 0;
+    bool is_sink = node.uid == node_num-1;
 
-    tuple<double, int> result = aggregate_push_relabel(CALL, is_source, is_sink, capacity, node_number);
+    tuple<double, int> result = aggregate_push_relabel(CALL, is_source, is_sink, capacity, node_num);
 
 	// usage of node storage
     node.storage(node_size{}) = 10;
@@ -204,8 +207,6 @@ using namespace component::tags;
 //! @brief Import tags used by aggregate functions.
 using namespace coordination::tags;
 
-//! @brief Number of people in the area.
-constexpr int node_num = 10;
 //! @brief Dimensionality of the space.
 constexpr size_t dim = 2;
 constexpr size_t end = 1000;
@@ -307,7 +308,6 @@ DECLARE_OPTIONS(list,
 } // namespace option
 
 } // namespace fcpp
-
 
 //! @brief The main function.
 int main() {

@@ -13,7 +13,7 @@
 int main(int argc, char *argv[]) {
     using namespace fcpp;
     // The test to be run
-    int test = argc > 1 ? stoi(argv[1]) : 2;
+    int test = argc > 1 ? stoi(argv[1]) : 4;
 
     // Set up the plotting object.
     fcpp::option::plot_t p;
