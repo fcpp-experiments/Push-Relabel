@@ -176,7 +176,7 @@ MAIN() {
     *rec2.begin() = 500;
     *(rec2.begin() + 1) = 500;
 
-    rectangle_walk(CALL, rec1, rec2, .2, 1);
+//    rectangle_walk(CALL, rec1, rec2, .2, 1);
 
     bool is_source = node.uid == 0;
     bool is_sink = node.uid == node_num-1;
