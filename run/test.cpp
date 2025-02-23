@@ -44,6 +44,7 @@ namespace tags {
 	struct min_node_uid {};
 	struct node_uid {};
     struct sink_flow {};
+    struct source_flow {};
     struct test_id {};
 }
 
@@ -152,13 +153,15 @@ MAIN() {
 	int node_number = 10;
 	int uid = node.uid;
 
-    field<double> capacity = node.nbr_dist();
+    //    field<double> capacity = node.nbr_dist();
+    field<double> capacity = 1;
     field<bool> connected = nbr(CALL, false, true);
 
     // capacity = mux(capacity > 0 and capacity <= 250 and connected, 260 - capacity, 0ll);
     capacity = map_hood([&](int dist, bool conn){
         if(conn){
-            double c = get_capacity(dist);
+            //double c = get_capacity(dist);
+            double c = dist;
             return c;
         }
         return .0;
@@ -180,8 +183,9 @@ MAIN() {
 	// usage of node storage
     node.storage(node_size{}) = 10;
     node.storage(node_color{}) = color(GREEN);
-    node.storage(node_shape{}) = shape::sphere;
+    node.storage(node_shape{}) = is_sink ? shape::star : is_source ? shape::cube : shape::sphere;
     node.storage(sink_flow{}) = is_sink ? get<0>(result) : 0;
+    //node.storage(source_flow{}) = is_source ? get<0>(result) : 0;
     // fcpp::component::tags::radius{} = 10;
 }
 
@@ -239,7 +243,8 @@ using store_t = tuple_store<
 	min_node_nbr,				int,
 	min_node_uid,				int,
 	node_uid,					int,
-    sink_flow,                  double
+    sink_flow,                  double,
+    source_flow,                double
 >;
 //! @brief The tags and corresponding aggregators to be logged (change as needed).
 using aggregator_t = aggregators<
